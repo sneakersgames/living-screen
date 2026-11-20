@@ -1,6 +1,7 @@
 # Sourced by the odimac scripts: defaults, then the config file.
 RECEIVER_NAME=""
 RECEIVER_DEVICE="Mac"
+RECEIVER_DECODER="avdec_h264"
 RECEIVER_EXTRA_ARGS=""
 PANEL_OFF_DELAY=60
 SUSPEND_AFTER=0

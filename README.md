@@ -14,8 +14,8 @@ iMac) and the installer.
 **Status: runs on a real iMac18,3 from the live stick.** Confirmed there:
 the panel at 5120x2880, hardware H.264 and HEVC decoding, the Thunderbolt
 link to an Apple silicon MacBook, and a session started from the Mac's
-OpenDisplay menu. Not yet confirmed: the Mac connecting by itself when the
-cable is plugged in, and the installer on real hardware.
+OpenDisplay menu, and the Mac connecting by itself over the cable when it is
+plugged in. Not yet confirmed: the installer on real hardware.
 
 ## What is in it
 
@@ -143,6 +143,7 @@ An iMac with a Fusion Drive shows two disks; install onto the SSD.
 | `SUSPEND_AFTER` | `0` | Seconds without cable and session before suspending; `0` never suspends |
 | `BRIGHTNESS` | unset | Panel brightness in percent, if the kernel offers backlight control |
 | `RECEIVER_DEVICE` | `Mac` | See the comment in the file |
+| `RECEIVER_DECODER` | `avdec_h264` | Video decoder; see the comment in the file |
 | `RECEIVER_EXTRA_ARGS` | empty | Passed to `od-receiver` |
 
 Compositor overrides, such as another scale, go in
@@ -175,9 +176,13 @@ Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
   down cleanly.
 - **The stream is not encrypted.** The cable is private, and the firewall
   keeps the receiver off the Ethernet network.
-- **About 30 frames per second at "Best" quality.** Measured on an iMac18,3:
-  decoding a 4096x2304 frame takes about 34 ms. `odimac-doctor decode-bench`
-  shows whether the decoder or the copying of frames is the limit.
+- **About 45 frames per second at "Best" quality**, with 13 to 18 ms from
+  capture to display, measured on an iMac18,3 over the cable with an Apple
+  silicon MacBook. The MacBook's encoder sets that rate (its log counts the
+  frames it skips as `enc↓`), not the iMac: `odimac-doctor decode-bench`
+  shows the iMac decoding several times faster.
+- **Connecting takes about 20 seconds after the cable is plugged in.** The
+  Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
 - The Mac only connects by itself when the cable appears. If the Mac sender
   is started with the cable already in, pick the iMac from its menu once.
