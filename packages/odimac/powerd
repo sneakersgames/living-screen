@@ -42,6 +42,14 @@ if [[ -n $BRIGHTNESS ]]; then
   brightnessctl -q set "${BRIGHTNESS}%" 2>/dev/null || log "no backlight control, BRIGHTNESS ignored"
 fi
 
+# The stitched 5K driver can come up with only the left half of the picture
+# stretched across the panel; one power cycle of the output corrects it.
+stitch=$(cat "$SYSFS/module/amdgpu/parameters/tiled_stitch" 2>/dev/null)
+if [[ $PANEL_POWER_CYCLE == 1 || ( $PANEL_POWER_CYCLE == auto && $stitch == 1 ) ]]; then
+  sleep 3
+  swaymsg -q "output * power off" && sleep 2 && swaymsg -q "output * power on" && log "panel power-cycled (5K driver)"
+fi
+
 now=$(date +%s)
 lit_until=$((now + PANEL_OFF_DELAY))
 alone_since=$now

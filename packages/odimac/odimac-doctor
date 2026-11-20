@@ -21,7 +21,12 @@ report() {
     [[ $(<"$c/status") == connected ]] && printf ', best mode %s' "$(head -n1 "$c/modes" 2>/dev/null)"
     echo
   done
-  echo "(expected: one connected output with best mode 5120x2880)"
+  stitch=$(cat /sys/module/amdgpu/parameters/tiled_stitch 2>/dev/null)
+  case $stitch in
+    1) echo "5K driver: active (expect 5120x2880 above)" ;;
+    "") echo "5K driver: not installed, stock amdgpu (expect 3840x2160 above)" ;;
+    *) echo "5K driver: installed but tiled_stitch=$stitch" ;;
+  esac
   sock=$(sway_sock)
   if [[ -n $sock ]]; then
     SWAYSOCK=$sock swaymsg -p -t get_outputs 2>/dev/null | sed -n "1,5p"

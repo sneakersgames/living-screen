@@ -5,9 +5,13 @@
 set -euo pipefail
 : "${OPENDISPLAY_REPO:=https://github.com/peetzweg/opendisplay}"
 : "${OPENDISPLAY_REF:=v1.30.3}"
+# Kernel package to pin, from the Arch Linux Archive. The 5K panel driver
+# (scripts/build-amdgpu5k.sh) supports the 7.1 and 7.2 series only. Set
+# KERNEL_PKGVER=current for Arch's current kernel and the stock 4K driver.
+: "${KERNEL_PKGVER:=7.2.11.arch1-1}"
 SRC=/src OUT=/out WORK=/work REPO=/work/repo
 
-pacman -Syu --noconfirm --needed base-devel git archiso grub
+pacman -Syu --noconfirm --needed base-devel git archiso grub bc cpio pahole zstd kmod
 
 useradd -m builder
 cat > /etc/sudoers.d/builder <<'SUDO'
@@ -30,6 +34,25 @@ cp -r "$SRC/packages/odimac" "$WORK/odimac"
 chown -R builder "$WORK/odimac"
 (cd "$WORK/odimac" && as_builder makepkg --force --nodeps)
 
+extra_packages=()
+if [[ $KERNEL_PKGVER != current ]]; then
+  krel=${KERNEL_PKGVER/.arch/-arch}
+  echo "==> kernel $krel with the 5K panel driver"
+  archive=https://archive.archlinux.org/packages/l
+  # pacman verifies the packages' signatures before installing them.
+  pacman -U --noconfirm \
+    "$archive/linux/linux-$KERNEL_PKGVER-x86_64.pkg.tar.zst" \
+    "$archive/linux-headers/linux-headers-$KERNEL_PKGVER-x86_64.pkg.tar.zst"
+  cp "/var/cache/pacman/pkg/linux-$KERNEL_PKGVER-x86_64.pkg.tar.zst" "$REPO/"
+  cp -r "$SRC/packages/odimac-amdgpu5k" "$WORK/odimac-amdgpu5k"
+  printf '_krel=%s\n_pkgver=%s\n' "$krel" "$KERNEL_PKGVER" > "$WORK/odimac-amdgpu5k/krel"
+  mkdir -p "$WORK/kernel"
+  chown -R builder "$WORK/odimac-amdgpu5k" "$WORK/kernel"
+  as_builder "$SRC/scripts/build-amdgpu5k.sh" "$krel" "$WORK/kernel" "$WORK/odimac-amdgpu5k/amdgpu.ko.zst"
+  (cd "$WORK/odimac-amdgpu5k" && as_builder makepkg --force --nodeps)
+  extra_packages+=(odimac-amdgpu5k)
+fi
+
 repo-add -q "$REPO/odimac.db.tar.gz" "$REPO"/*.pkg.tar.zst
 
 echo "==> ISO profile"
@@ -37,12 +60,10 @@ profile=$WORK/profile
 cp -r /usr/share/archiso/configs/baseline "$profile"
 cp -r "$SRC/iso/airootfs/." "$profile/airootfs/"
 grep -v '^#' "$SRC/iso/packages.extra" >> "$profile/packages.x86_64"
-cat >> "$profile/pacman.conf" <<CONF
-
-[odimac]
-SigLevel = Optional TrustAll
-Server = file://$REPO
-CONF
+printf '%s\n' "${extra_packages[@]}" >> "$profile/packages.x86_64"
+# Ahead of [core], so a pinned kernel in the local repository wins.
+sed -i "0,/^\\[core\\]/s||[odimac]\\nSigLevel = Optional TrustAll\\nServer = file://$REPO\\n\\n[core]|" "$profile/pacman.conf"
+grep -q '^\[odimac\]' "$profile/pacman.conf" || { echo "could not add the local repository to pacman.conf" >&2; exit 1; }
 sed -i -e 's/^iso_name=.*/iso_name="odimac"/' \
        -e 's/^iso_application=.*/iso_application="OpenDisplay iMac appliance"/' \
        "$profile/profiledef.sh"
