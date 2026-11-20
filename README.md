@@ -38,7 +38,10 @@ On any x86_64 machine with Docker:
 ./build.sh
 ```
 
-This produces `out/odimac-<date>-x86_64.iso` (and the two packages). It
+No x86_64 machine (an Apple silicon Mac)? Use the **Build ISO** workflow
+under the repository's Actions tab instead; the ISO is attached to the run.
+
+This produces `out/odimac-<date>-x86_64.iso` (and the packages). It
 builds the receiver from upstream tag `v1.30.3`; to build a fork or another
 tag, set `OPENDISPLAY_REPO` and `OPENDISPLAY_REF`.
 
@@ -115,13 +118,14 @@ Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
 
 ## Known limits
 
-- **The panel runs at 3840x2160, not 5120x2880** (confirmed on an iMac18,3
-  with kernel 7.2.11). Apple drives the 5K panel as two 2560x2880 halves and
-  the stock `amdgpu` driver only wakes one link, so the panel's own scaler
-  stretches a 4K picture. Community kernel patches fix this
-  ([taprobane99/iMac5KLinux](https://github.com/taprobane99/iMac5KLinux),
-  [ahmadtv/omarchy-imac18-3](https://github.com/ahmadtv/omarchy-imac18-3),
-  upstream thread drm/amd#4455); they are not in this image yet.
+- **Native 5120x2880 needs a patched graphics driver, which the image now
+  carries but which is untested here.** Apple drives the 5K panel as two
+  2560x2880 halves and the stock `amdgpu` driver only wakes one, giving
+  3840x2160 (confirmed on an iMac18,3). The image pins kernel 7.2.11 and
+  adds the `odimac-amdgpu5k` package: `amdgpu` rebuilt with the patch stack
+  from [ahmadtv/omarchy-imac18-3](https://github.com/ahmadtv/omarchy-imac18-3)
+  (upstream thread drm/amd#4455), which presents both halves as one display.
+  See "The 5K driver" below.
 - **The stream is H.264, at most 4096x2304.** A native 5K stream also needs
   HEVC in the Linux receiver.
 - **Suspend is not usable.** On the iMac18,3 the machine resumes but the
@@ -135,6 +139,29 @@ Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
 - The Mac only connects by itself when the cable appears. If the Mac sender
   is started with the cable already in, pick the iMac from its menu once.
+
+## The 5K driver
+
+`odimac-doctor` says whether it is active and which mode the panel runs.
+
+- **Black or garbled screen with the 5K driver:** at the boot menu (on an
+  installed system hold Space while it starts) press `e` and add
+  `module_blacklist=amdgpu` to the line. The system then starts on the
+  firmware's plain framebuffer without the display session. Log in on the
+  console and remove the driver:
+
+  ```bash
+  pacman -R odimac-amdgpu5k && mkinitcpio -P
+  ```
+
+  The stock driver (3840x2160) is used from the next boot.
+- **Half the picture stretched across the panel:** the session power-cycles
+  the panel once at start to correct this (`PANEL_POWER_CYCLE`); if it still
+  happens, `systemctl restart odimac-kiosk`.
+- **Do not upgrade the kernel** (`pacman -Syu` refuses because the driver
+  package depends on the exact kernel). The patches support the 7.1 and 7.2
+  series only. To build an image with Arch's current kernel and the stock
+  driver: `KERNEL_PKGVER=current ./build.sh`.
 
 ## Develop
 
