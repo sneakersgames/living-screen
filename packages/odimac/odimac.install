@@ -1,0 +1,7 @@
+post_install() {
+  systemctl enable odimac-kiosk.service systemd-networkd.service
+  systemctl set-default graphical.target
+}
+pre_remove() {
+  systemctl disable odimac-kiosk.service
+}

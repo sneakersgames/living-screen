@@ -1,0 +1,11 @@
+#!/bin/bash
+# Runs od-receiver forever inside the kiosk session.
+. /usr/lib/odimac/common.sh
+args=(--name "$RECEIVER_NAME" --device "$RECEIVER_DEVICE" --listen "0.0.0.0:$RECEIVER_PORT")
+read -ra extra <<<"$RECEIVER_EXTRA_ARGS"
+# Ends with the compositor, so a restarted session starts clean.
+while [[ -S ${SWAYSOCK:-} ]]; do
+  od-receiver "${args[@]}" "${extra[@]}"
+  echo "od-receiver exited ($?), restarting" >&2
+  sleep 2
+done

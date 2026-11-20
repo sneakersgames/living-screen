@@ -1,0 +1,15 @@
+# The Thunderbolt cable to the MacBook (macOS: "Thunderbolt Bridge").
+# Link-local addresses only: the Mac sender recognises a direct cable by the
+# absence of any routable address, and connects on its own when it sees one.
+[Match]
+Name=thunderbolt*
+
+[Link]
+RequiredForOnline=no
+
+[Network]
+DHCP=no
+LinkLocalAddressing=yes
+IPv6AcceptRA=no
+MulticastDNS=no
+LLMNR=no

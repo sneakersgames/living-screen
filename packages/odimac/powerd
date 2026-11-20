@@ -1,0 +1,98 @@
+#!/bin/bash
+# Panel and suspend policy for the kiosk session. Runs inside sway.
+#
+#   panel on   while a sender is connected, and for PANEL_OFF_DELAY seconds
+#              after boot, resume, a cable plug-in or the end of a session
+#   panel off  otherwise (output power off: backlight dark, machine idle)
+#   suspend    optional, only with no cable and no session (SUSPEND_AFTER)
+#
+# "Cable" is a thunderbolt-net interface: the kernel creates one when the
+# far end of the Thunderbolt cable is a computer. "Session" is an established
+# TCP connection to the receiver's port.
+. "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
+SYSFS="${ODIMAC_SYSFS:-/sys}"
+POLL="${ODIMAC_POLL:-1}"
+
+log() { echo "$*" >&2; }
+
+cable_present() {
+  local d
+  for d in "$SYSFS"/class/net/*; do
+    [[ -e $d ]] || continue
+    [[ ${d##*/} == thunderbolt* ]] && return 0
+    [[ $(readlink -f "$d/device/driver" 2>/dev/null) == */thunderbolt-net ]] && return 0
+  done
+  return 1
+}
+
+session_active() {
+  [[ -n $(ss -Htn state established "( sport = :$RECEIVER_PORT )" 2>/dev/null) ]]
+}
+
+panel=unknown
+set_panel() {
+  [[ $panel == "$1" ]] && return
+  if swaymsg -q "output * power $1"; then
+    panel=$1
+    log "panel $1 ($2)"
+  fi
+}
+
+if [[ -n $BRIGHTNESS ]]; then
+  brightnessctl -q set "${BRIGHTNESS}%" 2>/dev/null || log "no backlight control, BRIGHTNESS ignored"
+fi
+
+now=$(date +%s)
+lit_until=$((now + PANEL_OFF_DELAY))
+alone_since=$now
+had_cable=0
+had_session=0
+log "started (panel off after ${PANEL_OFF_DELAY}s idle, suspend after ${SUSPEND_AFTER}s)"
+
+while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
+  prev=$now
+  now=$(date +%s)
+  # A jump in the clock means the machine slept: start over as after boot.
+  if (( now - prev > 30 )); then
+    log "resumed from sleep"
+    lit_until=$((now + PANEL_OFF_DELAY))
+    alone_since=$now
+    had_cable=0
+    panel=unknown
+  fi
+
+  cable=0; cable_present && cable=1
+  session=0; session_active && session=1
+
+  if (( cable && !had_cable )); then
+    log "cable plugged in"
+    lit_until=$((now + PANEL_OFF_DELAY))
+  fi
+  (( !cable && had_cable )) && log "cable removed"
+  if (( session )); then
+    lit_until=$((now + PANEL_OFF_DELAY))
+  fi
+  (( session && !had_session )) && log "sender connected"
+  (( !session && had_session )) && log "sender disconnected"
+  had_cable=$cable
+  had_session=$session
+
+  if (( session )); then
+    set_panel on "sender connected"
+  elif (( now < lit_until )); then
+    set_panel on "waiting for a sender"
+  else
+    set_panel off "idle"
+  fi
+
+  if (( cable || session )); then
+    alone_since=$now
+  elif (( SUSPEND_AFTER > 0 && now - alone_since >= SUSPEND_AFTER )); then
+    log "no cable for ${SUSPEND_AFTER}s, suspending"
+    alone_since=$now
+    systemctl suspend || log "suspend failed"
+    sleep 10
+  fi
+
+  sleep "$POLL"
+done

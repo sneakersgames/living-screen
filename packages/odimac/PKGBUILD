@@ -1,0 +1,42 @@
+# The appliance layer: kiosk session, power policy, network setup, installer.
+pkgname=odimac
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Turns an Intel iMac into a single-purpose OpenDisplay screen"
+arch=('any')
+url="https://github.com/peetzweg/opendisplay"
+license=('GPL-3.0-only')
+depends=(
+  'opendisplay-receiver'
+  'sway' 'swaybg' 'polkit'
+  'mesa' 'gst-plugin-va' 'libva-utils' 'gstreamer'
+  'brightnessctl' 'iproute2' 'util-linux' 'systemd'
+  'dosfstools' 'e2fsprogs' 'arch-install-scripts'   # odimac-install
+)
+backup=('etc/odimac/odimac.conf')
+install=odimac.install
+_files=(odimac.conf common.sh receiver-loop powerd wake-sources sleep-hook
+  sway.conf odimac-kiosk.service pam-odimac-kiosk sysusers.conf tmpfiles.conf
+  polkit.rules 10-odimac-thunderbolt.network 15-odimac-ethernet.network
+  modules-load.conf mkinitcpio.conf logind.conf odimac-doctor odimac-install)
+source=("${_files[@]}")
+sha256sums=($(printf 'SKIP %.0s' "${_files[@]}"))
+
+package() {
+  install -Dm644 odimac.conf "$pkgdir/etc/odimac/odimac.conf"
+  install -Dm644 common.sh "$pkgdir/usr/lib/odimac/common.sh"
+  install -Dm755 receiver-loop powerd wake-sources -t "$pkgdir/usr/lib/odimac"
+  install -Dm755 sleep-hook "$pkgdir/usr/lib/systemd/system-sleep/odimac-wake"
+  install -Dm644 sway.conf "$pkgdir/usr/share/odimac/sway.conf"
+  install -Dm644 odimac-kiosk.service -t "$pkgdir/usr/lib/systemd/system"
+  install -Dm644 pam-odimac-kiosk "$pkgdir/etc/pam.d/odimac-kiosk"
+  install -Dm644 sysusers.conf "$pkgdir/usr/lib/sysusers.d/odimac.conf"
+  install -Dm644 tmpfiles.conf "$pkgdir/usr/lib/tmpfiles.d/odimac.conf"
+  install -Dm644 polkit.rules "$pkgdir/usr/share/polkit-1/rules.d/50-odimac.rules"
+  install -Dm644 10-odimac-thunderbolt.network 15-odimac-ethernet.network \
+    -t "$pkgdir/usr/lib/systemd/network"
+  install -Dm644 modules-load.conf "$pkgdir/usr/lib/modules-load.d/odimac.conf"
+  install -Dm644 logind.conf "$pkgdir/usr/lib/systemd/logind.conf.d/odimac.conf"
+  install -Dm644 mkinitcpio.conf "$pkgdir/etc/mkinitcpio.conf.d/odimac.conf"
+  install -Dm755 odimac-doctor odimac-install -t "$pkgdir/usr/bin"
+}

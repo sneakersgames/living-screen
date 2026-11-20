@@ -1,0 +1,116 @@
+#!/bin/bash
+# Diagnostics for the OpenDisplay iMac appliance.
+#   odimac-doctor                 report on panel, decoding, Thunderbolt, receiver
+#   odimac-doctor suspend-test    check that suspend works and what wakes it
+. /usr/lib/odimac/common.sh
+
+h() { printf '\n== %s ==\n' "$*"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+sway_sock() { ls /run/user/*/sway-ipc.*.sock 2>/dev/null | head -n1; }
+
+report() {
+  h "Machine"
+  echo "model:   $(cat /sys/class/dmi/id/product_name 2>/dev/null)  (iMac18,3 is the 2017 27\" 5K)"
+  echo "kernel:  $(uname -r)"
+  echo "appliance: $(pacman -Q odimac opendisplay-receiver 2>/dev/null | tr '\n' ' ')"
+
+  h "Panel"
+  for c in /sys/class/drm/card*-*; do
+    [[ -e $c/status ]] || continue
+    printf '%s: %s' "${c##*/}" "$(<"$c/status")"
+    [[ $(<"$c/status") == connected ]] && printf ', best mode %s' "$(head -n1 "$c/modes" 2>/dev/null)"
+    echo
+  done
+  echo "(expected: one connected output with best mode 5120x2880)"
+  sock=$(sway_sock)
+  if [[ -n $sock ]]; then
+    SWAYSOCK=$sock swaymsg -p -t get_outputs 2>/dev/null | sed -n "1,5p"
+  else
+    echo "kiosk session: NOT running (journalctl -b -u odimac-kiosk)"
+  fi
+  bl=$(ls /sys/class/backlight 2>/dev/null | tr '\n' ' ')
+  echo "backlight control: ${bl:-none (BRIGHTNESS has no effect)}"
+
+  h "Video decoding"
+  if have vainfo; then
+    render=$(ls /dev/dri/renderD* 2>/dev/null | head -n1)
+    profiles=$(vainfo --display drm --device "$render" 2>/dev/null | grep VAEntrypointVLD)
+    echo "VA-API H.264: $(grep -q H264 <<<"$profiles" && echo yes || echo NO)"
+    echo "VA-API HEVC:  $(grep -q HEVC <<<"$profiles" && echo yes || echo NO)"
+  fi
+  for el in vah264dec vah265dec avdec_h264; do
+    printf 'GStreamer %-11s %s\n' "$el:" "$(gst-inspect-1.0 --exists "$el" 2>/dev/null && echo yes || echo no)"
+  done
+  echo "(without vah264dec the receiver decodes on the CPU, which is too slow for 4K)"
+
+  h "Thunderbolt"
+  if [[ -d /sys/bus/thunderbolt/devices ]]; then
+    for d in /sys/bus/thunderbolt/devices/*; do
+      [[ -r $d/device_name ]] && echo "${d##*/}: $(cat "$d/vendor_name" 2>/dev/null) $(<"$d/device_name")"
+    done
+  else
+    echo "NO Thunderbolt controller visible to Linux"
+  fi
+  lsmod | grep -q '^thunderbolt_net' && echo "thunderbolt-net: loaded" || echo "thunderbolt-net: NOT loaded"
+  found=0
+  for n in /sys/class/net/thunderbolt*; do
+    [[ -e $n ]] || continue
+    found=1
+    echo "cable link ${n##*/}: carrier $(cat "$n/carrier" 2>/dev/null || echo ?)"
+    ip -brief addr show dev "${n##*/}"
+  done
+  (( found )) || echo "no cable link: no computer on the Thunderbolt port (or it is asleep)"
+
+  h "Receiver"
+  if ss -Hltn "( sport = :$RECEIVER_PORT )" | grep -q .; then
+    echo "listening on port $RECEIVER_PORT as \"$RECEIVER_NAME\""
+  else
+    echo "NOT listening on port $RECEIVER_PORT"
+  fi
+  peers=$(ss -Htn state established "( sport = :$RECEIVER_PORT )" | awk '{print $NF}')
+  echo "sender: ${peers:-none connected}"
+  journalctl -b -t odimac-receiver -t odimac-powerd --no-pager -n 20 2>/dev/null
+
+  h "Power"
+  echo "sleep states: $(cat /sys/power/state 2>/dev/null)  mem_sleep: $(cat /sys/power/mem_sleep 2>/dev/null)"
+  echo "PANEL_OFF_DELAY=$PANEL_OFF_DELAY SUSPEND_AFTER=$SUSPEND_AFTER"
+}
+
+suspend_test() {
+  (( EUID == 0 )) || { echo "run as root"; exit 1; }
+  cat <<'MSG'
+Test 1: does suspend work at all? The machine sleeps and wakes itself after
+30 seconds. If the screen does not come back within a minute, suspend does
+not work on this machine with this kernel: hold the power button, and leave
+SUSPEND_AFTER=0.
+MSG
+  read -rp "Unplug the Thunderbolt cable, then press Enter (Ctrl+C to abort) "
+  /usr/lib/odimac/wake-sources pre
+  rtcwake -m mem -s 30 || { echo "suspend failed"; exit 1; }
+  echo "Test 1 passed: resumed."
+  cat <<'MSG'
+
+Test 2: does plugging the cable in wake it? The machine sleeps with no
+timer. Wait ten seconds, then plug the Thunderbolt cable into the awake
+MacBook. If nothing happens within 20 seconds, press the power button
+briefly to wake it.
+MSG
+  read -rp "Press Enter to sleep "
+  before=$(date +%s)
+  systemctl suspend
+  sleep 15
+  echo "Resumed after $(( $(date +%s) - before )) s."
+  echo "Wake interrupt: $(cat /sys/power/pm_wakeup_irq 2>/dev/null || echo unknown)"
+  journalctl -b -k --no-pager --since "@$before" | grep -i -E 'wake|thunderbolt|PM: ' | tail -n 15
+  cat <<'MSG'
+
+If the cable woke it (not the power button): set SUSPEND_AFTER (for example
+600) in /etc/odimac/odimac.conf and `systemctl restart odimac-kiosk`.
+MSG
+}
+
+case ${1:-} in
+  "") report ;;
+  suspend-test) suspend_test ;;
+  *) sed -n '2,4s/^# //p' "$0"; exit 1 ;;
+esac

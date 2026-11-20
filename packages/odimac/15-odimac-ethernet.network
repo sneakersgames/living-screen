@@ -1,0 +1,11 @@
+# Optional wired Ethernet, for maintenance (ssh, pacman).
+[Match]
+Name=en* eth*
+
+[Link]
+RequiredForOnline=no
+
+[Network]
+DHCP=yes
+MulticastDNS=no
+LLMNR=no

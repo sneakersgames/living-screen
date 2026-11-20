@@ -1,0 +1,29 @@
+[Unit]
+Description=OpenDisplay kiosk session (sway + od-receiver)
+After=systemd-user-sessions.service dbus.socket systemd-logind.service getty@tty1.service
+Wants=dbus.socket systemd-logind.service
+Conflicts=getty@tty1.service
+ConditionPathExists=/dev/tty0
+
+[Service]
+Type=simple
+User=odimac
+PAMName=odimac-kiosk
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_CURRENT_DESKTOP=sway
+ExecStart=/usr/bin/sway --config /usr/share/odimac/sway.conf
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical.target
+Alias=display-manager.service

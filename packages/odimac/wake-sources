@@ -1,0 +1,25 @@
+#!/bin/bash
+# Arms the Thunderbolt controller as a wake source so plugging the cable in
+# can wake the machine from suspend. Called by systemd before every sleep
+# (system-sleep hook) and by `odimac-doctor`. Needs root.
+[[ ${1:-pre} == pre ]] || exit 0
+SYSFS="${ODIMAC_SYSFS:-/sys}"
+arm() {
+  [[ -w $1/power/wakeup ]] || return 0
+  [[ $(<"$1/power/wakeup") == enabled ]] && return 0
+  echo enabled > "$1/power/wakeup" 2>/dev/null && echo "odimac: wake enabled on ${1#"$SYSFS"/}"
+}
+# The Thunderbolt host controller and every PCI bridge above it.
+for dev in "$SYSFS"/bus/pci/drivers/thunderbolt/*:*; do
+  [[ -e $dev ]] || continue
+  path=$(readlink -f "$dev")
+  while [[ ${path##*/} == *:*:*.* ]]; do
+    arm "$path"
+    path=${path%/*}
+  done
+done
+# Thunderbolt domains, routers and ports that offer wake.
+for dev in "$SYSFS"/bus/thunderbolt/devices/*; do
+  [[ -e $dev ]] && arm "$(readlink -f "$dev")"
+done
+exit 0
