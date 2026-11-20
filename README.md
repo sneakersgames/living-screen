@@ -11,8 +11,9 @@ MacBook, using [OpenDisplay](https://github.com/peetzweg/opendisplay).
 The same image is the live USB stick (for testing, nothing is written to the
 iMac) and the installer.
 
-**Status: built and unit-tested, never run on an iMac.** The sections
-"Test on the iMac" and "Known limits" say what is still unproven.
+**Status: built and tested in a VM; on a real iMac18,3 only the panel mode
+and suspend have been checked so far** (see "Known limits"). The Thunderbolt
+link and the receiver itself are still unproven on the hardware.
 
 ## What is in it
 
@@ -114,11 +115,19 @@ Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
 
 ## Known limits
 
-- **Not native 5K.** The Linux receiver decodes H.264 only, which the
-  protocol caps at 4096x2304. The Mac renders the 2560x1440 desktop and the
-  iMac upscales it by 1.25. Native 5K needs HEVC in the receiver.
-- **Wake from suspend on plug-in is unproven** on this hardware, hence the
-  default of never suspending.
+- **The panel runs at 3840x2160, not 5120x2880** (confirmed on an iMac18,3
+  with kernel 7.2.11). Apple drives the 5K panel as two 2560x2880 halves and
+  the stock `amdgpu` driver only wakes one link, so the panel's own scaler
+  stretches a 4K picture. Community kernel patches fix this
+  ([taprobane99/iMac5KLinux](https://github.com/taprobane99/iMac5KLinux),
+  [ahmadtv/omarchy-imac18-3](https://github.com/ahmadtv/omarchy-imac18-3),
+  upstream thread drm/amd#4455); they are not in this image yet.
+- **The stream is H.264, at most 4096x2304.** A native 5K stream also needs
+  HEVC in the Linux receiver.
+- **Suspend is not usable.** On the iMac18,3 the machine resumes but the
+  Thunderbolt and USB controllers do not come back
+  (`thunderbolt 0000:07:00.0: not ready after resume; giving up`). Keep
+  `SUSPEND_AFTER=0`.
 - **No shutdown from the Mac.** Use the power button: a short press shuts
   down cleanly.
 - **The stream is not encrypted.** The cable is private; if you also plug in
