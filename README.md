@@ -32,23 +32,49 @@ DHCP if you plug it in, for maintenance.
 
 ## Build
 
-On any x86_64 machine with Docker:
+With Docker, on Linux or a Mac:
 
 ```bash
 ./build.sh
 ```
 
-No x86_64 machine (an Apple silicon Mac)? Use the **Build ISO** workflow
-under the repository's Actions tab instead; the ISO is attached to the run.
+This produces `out/odimac-<date>-x86_64.iso` and the `odimac` packages.
 
-This produces `out/odimac-<date>-x86_64.iso` (and the packages). It
-builds the receiver from upstream tag `v1.30.3`; to build a fork or another
-tag, set `OPENDISPLAY_REPO` and `OPENDISPLAY_REF`.
+- **Apple silicon Mac:** the build runs in an emulated x86_64 container. In
+  Docker Desktop turn on Settings → General → "Use Rosetta for x86_64/amd64
+  emulation". Not tested on Apple silicon yet.
+- **First build is slow, later ones are not.** The receiver and the 5K
+  driver are compiled once and kept in `out/cache` (as are downloaded
+  packages); after that a build only reassembles the image. They are rebuilt
+  when what they are made from changes. Delete `out/cache` to start over.
+- **Other receiver source:** it is built from upstream tag `v1.30.3`; set
+  `OPENDISPLAY_REPO` and `OPENDISPLAY_REF` for a fork or another tag.
+- **Without Docker:** the "Build ISO" workflow under the repository's
+  Actions tab builds the same image and attaches it to the run.
 
-Write it to a USB stick (this erases the stick; replace `/dev/sdX`):
+### Write it to a USB stick
+
+This erases the stick. On macOS, find the stick's disk number first:
 
 ```bash
-sudo dd if=out/odimac-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
+diskutil list external
+```
+
+Then, with `N` replaced by that number (`rdiskN`, with the `r`, is much
+faster):
+
+```bash
+diskutil unmountDisk /dev/diskN
+```
+
+```bash
+sudo dd if="$(ls out/odimac-*.iso | tail -n1)" of=/dev/rdiskN bs=4m status=progress
+```
+
+macOS then says the disk is not readable; choose Eject. On Linux:
+
+```bash
+sudo dd if="$(ls out/odimac-*.iso | tail -n1)" of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
 ## Test on the iMac

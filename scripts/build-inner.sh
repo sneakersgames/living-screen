@@ -9,7 +9,7 @@ set -euo pipefail
 # (scripts/build-amdgpu5k.sh) supports the 7.1 and 7.2 series only. Set
 # KERNEL_PKGVER=current for Arch's current kernel and the stock 4K driver.
 : "${KERNEL_PKGVER:=7.2.11.arch1-1}"
-SRC=/src OUT=/out WORK=/work REPO=/work/repo
+SRC=/src OUT=/out WORK=/work REPO=/work/repo CACHE=/out/cache
 
 pacman -Syu --noconfirm --needed base-devel git archiso grub bc cpio pahole zstd kmod
 
@@ -22,12 +22,26 @@ mkdir -p "$WORK" "$REPO"
 chown builder "$WORK" "$REPO"
 as_builder() { sudo -u builder env PKGDEST="$REPO" "$@"; }
 
-echo "==> opendisplay-receiver from $OPENDISPLAY_REPO @ $OPENDISPLAY_REF"
-as_builder git clone --depth 1 --branch "$OPENDISPLAY_REF" "$OPENDISPLAY_REPO" "$WORK/opendisplay"
-check=--nocheck
-[[ ${RECEIVER_CHECK:-} == 1 ]] && check=
-(cd "$WORK/opendisplay/linux/packaging/arch/opendisplay-receiver" &&
-  as_builder ./from-checkout.sh --syncdeps --noconfirm $check)
+# The slow artifacts are kept in out/cache, keyed by everything they are built
+# from, and reused by later builds.
+recv_sha=$(git ls-remote "$OPENDISPLAY_REPO" "$OPENDISPLAY_REF" "$OPENDISPLAY_REF^{}" | tail -n1 | cut -c1-12)
+[[ -n $recv_sha ]] || { echo "cannot resolve $OPENDISPLAY_REF in $OPENDISPLAY_REPO" >&2; exit 1; }
+recv_cache=$CACHE/receiver-$recv_sha
+if compgen -G "$recv_cache/*.pkg.tar.zst" >/dev/null; then
+  echo "==> opendisplay-receiver $OPENDISPLAY_REF ($recv_sha): cached"
+else
+  echo "==> opendisplay-receiver from $OPENDISPLAY_REPO @ $OPENDISPLAY_REF ($recv_sha)"
+  as_builder git clone --depth 1 --branch "$OPENDISPLAY_REF" "$OPENDISPLAY_REPO" "$WORK/opendisplay"
+  check=--nocheck
+  [[ ${RECEIVER_CHECK:-} == 1 ]] && check=
+  mkdir -p "$WORK/recv-out"; chown builder "$WORK/recv-out"
+  (cd "$WORK/opendisplay/linux/packaging/arch/opendisplay-receiver" &&
+    sudo -u builder env PKGDEST="$WORK/recv-out" ./from-checkout.sh --syncdeps --noconfirm $check)
+  rm -rf "$recv_cache.tmp"; mkdir -p "$recv_cache.tmp"
+  cp "$WORK"/recv-out/opendisplay-receiver-[0-9]*.pkg.tar.zst "$recv_cache.tmp/"
+  mv "$recv_cache.tmp" "$recv_cache"
+fi
+cp "$recv_cache"/*.pkg.tar.zst "$REPO/"
 
 echo "==> odimac"
 cp -r "$SRC/packages/odimac" "$WORK/odimac"
@@ -38,18 +52,27 @@ extra_packages=()
 if [[ $KERNEL_PKGVER != current ]]; then
   krel=${KERNEL_PKGVER/.arch/-arch}
   echo "==> kernel $krel with the 5K panel driver"
-  archive=https://archive.archlinux.org/packages/l
-  # pacman verifies the packages' signatures before installing them.
-  pacman -U --noconfirm \
-    "$archive/linux/linux-$KERNEL_PKGVER-x86_64.pkg.tar.zst" \
-    "$archive/linux-headers/linux-headers-$KERNEL_PKGVER-x86_64.pkg.tar.zst"
-  cp "/var/cache/pacman/pkg/linux-$KERNEL_PKGVER-x86_64.pkg.tar.zst" "$REPO/"
-  cp -r "$SRC/packages/odimac-amdgpu5k" "$WORK/odimac-amdgpu5k"
-  printf '_krel=%s\n_pkgver=%s\n' "$krel" "$KERNEL_PKGVER" > "$WORK/odimac-amdgpu5k/krel"
-  mkdir -p "$WORK/kernel"
-  chown -R builder "$WORK/odimac-amdgpu5k" "$WORK/kernel"
-  as_builder "$SRC/scripts/build-amdgpu5k.sh" "$krel" "$WORK/kernel" "$WORK/odimac-amdgpu5k/amdgpu.ko.zst"
-  (cd "$WORK/odimac-amdgpu5k" && as_builder makepkg --force --nodeps)
+  key=$(cat "$SRC/scripts/build-amdgpu5k.sh" "$SRC"/packages/odimac-amdgpu5k/* | sha256sum | cut -c1-12)
+  k5_cache=$CACHE/amdgpu5k-$KERNEL_PKGVER-$key
+  if compgen -G "$k5_cache/odimac-amdgpu5k-*.pkg.tar.zst" >/dev/null; then
+    echo "    cached"
+  else
+    archive=https://archive.archlinux.org/packages/l
+    # pacman verifies the packages' signatures before installing them.
+    pacman -U --noconfirm \
+      "$archive/linux/linux-$KERNEL_PKGVER-x86_64.pkg.tar.zst" \
+      "$archive/linux-headers/linux-headers-$KERNEL_PKGVER-x86_64.pkg.tar.zst"
+    cp -r "$SRC/packages/odimac-amdgpu5k" "$WORK/odimac-amdgpu5k"
+    printf '_krel=%s\n_pkgver=%s\n' "$krel" "$KERNEL_PKGVER" > "$WORK/odimac-amdgpu5k/krel"
+    mkdir -p "$WORK/kernel" "$WORK/k5-out"
+    chown -R builder "$WORK/odimac-amdgpu5k" "$WORK/kernel" "$WORK/k5-out"
+    as_builder "$SRC/scripts/build-amdgpu5k.sh" "$krel" "$WORK/kernel" "$WORK/odimac-amdgpu5k/amdgpu.ko.zst"
+    (cd "$WORK/odimac-amdgpu5k" && sudo -u builder env PKGDEST="$WORK/k5-out" makepkg --force --nodeps)
+    rm -rf "$k5_cache.tmp"; mkdir -p "$k5_cache.tmp"
+    cp "$WORK"/k5-out/*.pkg.tar.zst "/var/cache/pacman/pkg/linux-$KERNEL_PKGVER-x86_64.pkg.tar.zst" "$k5_cache.tmp/"
+    mv "$k5_cache.tmp" "$k5_cache"
+  fi
+  cp "$k5_cache"/*.pkg.tar.zst "$REPO/"
   extra_packages+=(odimac-amdgpu5k)
 fi
 
@@ -81,5 +104,5 @@ find "$profile/airootfs/etc/systemd/system" -type l \( -name 'cloud-*' -o -name 
   -o -name 'systemd-networkd-wait-online.service' \) -delete
 
 mkarchiso -v -w "$WORK/iso" -o "$OUT" "$profile"
-cp "$REPO"/*.pkg.tar.zst "$OUT"/
+cp "$REPO"/odimac-*.pkg.tar.zst "$OUT"/
 ls -lh "$OUT"

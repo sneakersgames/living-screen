@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Builds the live/installer ISO in an Arch Linux container.
 #   ./build.sh            -> out/odimac-<date>-x86_64.iso
-# Needs docker (or podman via DOCKER=podman) and an x86_64 host.
+# Needs Docker (or podman via DOCKER=podman). On an Apple silicon Mac the
+# x86_64 container runs emulated: enable "Use Rosetta for x86_64/amd64
+# emulation" in Docker Desktop's settings, and expect the first build to be
+# slow. The receiver and the 5K driver are cached in out/cache, so later
+# builds only repackage the image.
 #
 #   OPENDISPLAY_REPO   git URL of the OpenDisplay source (default: upstream)
 #   OPENDISPLAY_REF    branch or tag to build the receiver from (default: v1.30.3)
@@ -13,11 +17,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 docker=${DOCKER:-docker}
-[[ $(uname -m) == x86_64 ]] || { echo "build.sh: needs an x86_64 host" >&2; exit 1; }
-mkdir -p out
+mkdir -p out/cache/pacman
 # shellcheck disable=SC2086
-exec "$docker" run --rm --privileged \
+exec "$docker" run --rm --privileged --platform linux/amd64 \
   -v "$PWD":/src:ro -v "$PWD/out":/out \
+  -v "$PWD/out/cache/pacman":/var/cache/pacman/pkg \
   -e OPENDISPLAY_REPO -e OPENDISPLAY_REF -e RECEIVER_CHECK -e KERNEL_PKGVER \
   -e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY -e https_proxy -e http_proxy -e no_proxy \
   ${DOCKER_ARGS:-} \
