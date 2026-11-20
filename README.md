@@ -11,9 +11,11 @@ MacBook, using [OpenDisplay](https://github.com/peetzweg/opendisplay).
 The same image is the live USB stick (for testing, nothing is written to the
 iMac) and the installer.
 
-**Status: built and tested in a VM; on a real iMac18,3 only the panel mode
-and suspend have been checked so far** (see "Known limits"). The Thunderbolt
-link and the receiver itself are still unproven on the hardware.
+**Status: runs on a real iMac18,3 from the live stick.** Confirmed there:
+the panel at 5120x2880, hardware H.264 and HEVC decoding, the Thunderbolt
+link to an Apple silicon MacBook, and a session started from the Mac's
+OpenDisplay menu. Not yet confirmed: the Mac connecting by itself when the
+cable is plugged in, and the installer on real hardware.
 
 ## What is in it
 
@@ -144,12 +146,12 @@ Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
 
 ## Known limits
 
-- **Native 5120x2880 needs a patched graphics driver, which the image now
-  carries but which is untested here.** Apple drives the 5K panel as two
+- **Native 5120x2880 uses a patched graphics driver** (confirmed working on
+  an iMac18,3: `eDP-1` at 5120x2880). Apple drives the 5K panel as two
   2560x2880 halves and the stock `amdgpu` driver only wakes one, giving
-  3840x2160 (confirmed on an iMac18,3). The image pins kernel 7.2.11 and
-  adds the `odimac-amdgpu5k` package: `amdgpu` rebuilt with the patch stack
-  from [ahmadtv/omarchy-imac18-3](https://github.com/ahmadtv/omarchy-imac18-3)
+  3840x2160. The image pins kernel 7.2.11 and adds the `odimac-amdgpu5k`
+  package: `amdgpu` rebuilt with the patch stack from
+  [ahmadtv/omarchy-imac18-3](https://github.com/ahmadtv/omarchy-imac18-3)
   (upstream thread drm/amd#4455), which presents both halves as one display.
   See "The 5K driver" below.
 - **The stream is H.264, at most 4096x2304.** A native 5K stream also needs

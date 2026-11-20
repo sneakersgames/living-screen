@@ -74,7 +74,8 @@ report() {
   fi
   peers=$(ss -Htn state established "( sport = :$RECEIVER_PORT )" | awk '{print $NF}')
   echo "sender: ${peers:-none connected}"
-  journalctl -b -t odimac-receiver -t odimac-powerd --no-pager -n 20 2>/dev/null
+  journalctl -b -t odimac-receiver -t odimac-powerd --no-pager -o cat 2>/dev/null |
+    grep -v " INFO stats " | cut -c1-160 | tail -n 20
 
   h "Power"
   echo "sleep states: $(cat /sys/power/state 2>/dev/null)  mem_sleep: $(cat /sys/power/mem_sleep 2>/dev/null)"
