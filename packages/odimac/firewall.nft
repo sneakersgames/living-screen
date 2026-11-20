@@ -1,0 +1,22 @@
+#!/usr/bin/nft -f
+# The receiver is only reachable over the Thunderbolt cable. Without this, a
+# Mac on the same network as the iMac's Ethernet port finds and uses it over
+# Wi-Fi instead. Ethernet stays usable for maintenance (ssh, pacman).
+# Turn off with:  systemctl disable --now odimac-firewall
+table inet odimac
+delete table inet odimac
+table inet odimac {
+  chain input {
+    type filter hook input priority filter; policy accept;
+    iifname "lo" accept
+    iifname "thunderbolt*" accept
+    tcp dport 9000 drop
+    udp dport { 9001, 5353 } drop
+  }
+  chain output {
+    type filter hook output priority filter; policy accept;
+    oifname "lo" accept
+    oifname "thunderbolt*" accept
+    udp dport 5353 drop
+  }
+}

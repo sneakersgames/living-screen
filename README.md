@@ -25,12 +25,15 @@ cable is plugged in, and the installer on real hardware.
 | `odimac-kiosk.service` | Starts `sway` on tty1 as user `odimac`, at scale 2, with nothing but the receiver in it |
 | `odimac-powerd` | Lights the panel while a sender is connected or a cable was just plugged in, darkens it otherwise, optionally suspends |
 | `10-odimac-thunderbolt.network` | Link-local addresses on the Thunderbolt link, which is how the Mac recognises a direct cable |
-| `odimac-doctor` | Reports on panel, hardware decoding, Thunderbolt and the receiver; runs the suspend test |
+| `odimac-doctor` | Reports on panel, hardware decoding, Thunderbolt and the receiver; runs the suspend test and a decode benchmark |
 | `odimac-install` | Copies the live system onto the internal disk |
 
 Everything except the receiver is in the `odimac` package
-(`packages/odimac/`). There is no Wi-Fi and no firewall. Wired Ethernet gets
-DHCP if you plug it in, for maintenance.
+(`packages/odimac/`). There is no Wi-Fi. Wired Ethernet gets DHCP if you
+plug it in, for maintenance only: a firewall (`odimac-firewall.service`)
+makes the receiver reachable and visible over the Thunderbolt cable alone, so
+a session can never end up on Wi-Fi by way of the iMac's Ethernet port.
+`systemctl disable --now odimac-firewall` lifts that.
 
 ## Build
 
@@ -105,6 +108,14 @@ idle state.
 
 ## Install
 
+Running from the stick works indefinitely; streaming is no faster from the
+internal disk. Installing gets you a faster and more robust boot (no stick
+to fail or fall out), settings in `/etc/odimac/odimac.conf` that survive a
+reboot, and a stable identity towards the Mac: the live stick forgets
+everything at power-off, including the receiver's ID, so the Mac may treat it
+as a new display each time. While the image is still changing, staying on
+the stick is simpler, because every new image means a reflash either way.
+
 From the root shell on the live stick:
 
 ```bash
@@ -162,8 +173,11 @@ Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
   `SUSPEND_AFTER=0`.
 - **No shutdown from the Mac.** Use the power button: a short press shuts
   down cleanly.
-- **The stream is not encrypted.** The cable is private; if you also plug in
-  Ethernet, the receiver is reachable from that network.
+- **The stream is not encrypted.** The cable is private, and the firewall
+  keeps the receiver off the Ethernet network.
+- **About 30 frames per second at "Best" quality.** Measured on an iMac18,3:
+  decoding a 4096x2304 frame takes about 34 ms. `odimac-doctor decode-bench`
+  shows whether the decoder or the copying of frames is the limit.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
 - The Mac only connects by itself when the cable appears. If the Mac sender
   is started with the cable already in, pick the iMac from its menu once.

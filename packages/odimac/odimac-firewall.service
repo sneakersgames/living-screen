@@ -1,0 +1,13 @@
+[Unit]
+Description=Limit the OpenDisplay receiver to the Thunderbolt cable
+Before=odimac-kiosk.service network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nft -f /usr/share/odimac/firewall.nft
+ExecStop=/usr/bin/nft delete table inet odimac
+
+[Install]
+WantedBy=multi-user.target

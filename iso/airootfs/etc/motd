@@ -2,6 +2,6 @@
 OpenDisplay iMac, live stick.  Ctrl+Alt+F1 returns to the display session.
 
   odimac-doctor                  check panel, decoding, Thunderbolt, receiver
-  odimac-doctor suspend-test     check suspend and wake on cable plug-in
+  odimac-doctor decode-bench     measure video decoding speed
   odimac-install /dev/DISK       install onto the internal disk (erases it)
 
