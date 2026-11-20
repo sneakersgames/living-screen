@@ -11,6 +11,12 @@ set -euo pipefail
 : "${KERNEL_PKGVER:=7.2.11.arch1-1}"
 SRC=/src OUT=/out WORK=/work REPO=/work/repo CACHE=/out/cache
 
+# pacman's download sandbox (seccomp) fails under x86_64 emulation on Apple
+# silicon ("error restricting syscalls via seccomp"). This is a throwaway
+# build container, so turn it off: here for the container's own pacman, and
+# below for the one mkarchiso runs. Neither file ends up in the image.
+sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
+
 pacman -Syu --noconfirm --needed base-devel git archiso grub bc cpio pahole zstd kmod
 
 useradd -m builder
@@ -81,6 +87,7 @@ repo-add -q "$REPO/odimac.db.tar.gz" "$REPO"/*.pkg.tar.zst
 echo "==> ISO profile"
 profile=$WORK/profile
 cp -r /usr/share/archiso/configs/baseline "$profile"
+sed -i '/^\[options\]/a DisableSandbox' "$profile/pacman.conf"
 cp -r "$SRC/iso/airootfs/." "$profile/airootfs/"
 grep -v '^#' "$SRC/iso/packages.extra" >> "$profile/packages.x86_64"
 printf '%s\n' "${extra_packages[@]}" >> "$profile/packages.x86_64"
