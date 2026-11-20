@@ -1,6 +1,6 @@
 # The appliance layer: kiosk session, power policy, network setup, installer.
 pkgname=odimac
-pkgver=0.2.1
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Turns an Intel iMac into a single-purpose OpenDisplay screen"
 arch=('any')

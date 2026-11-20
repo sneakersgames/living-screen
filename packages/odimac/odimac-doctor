@@ -3,6 +3,7 @@
 #   odimac-doctor                 report on panel, decoding, Thunderbolt, receiver
 #   odimac-doctor suspend-test    check that suspend works and what wakes it
 #   odimac-doctor decode-bench    measure how fast this machine decodes a 4K stream
+#   odimac-doctor load            watch CPU use, temperatures and fan (Ctrl+C stops)
 . /usr/lib/odimac/common.sh
 
 h() { printf '\n== %s ==\n' "$*"; }
@@ -83,6 +84,10 @@ report() {
   journalctl -b -t odimac-receiver -t odimac-powerd --no-pager -o cat 2>/dev/null |
     grep -v " INFO stats " | cut -c1-160 | tail -n 20
 
+  h "Load"
+  load_sample; sleep 2; load_sample
+  journalctl -b -t odimac-powerd --no-pager -o cat 2>/dev/null | grep '^load: ' | tail -n 5
+
   h "Power"
   echo "sleep states: $(cat /sys/power/state 2>/dev/null)  mem_sleep: $(cat /sys/power/mem_sleep 2>/dev/null)"
   echo "PANEL_OFF_DELAY=$PANEL_OFF_DELAY SUSPEND_AFTER=$SUSPEND_AFTER"
@@ -158,9 +163,20 @@ first line is slow too, the Radeon's decoder is the limit.
 MSG
 }
 
+load_watch() {
+  echo "Every 2 seconds; connect a sender and move things around. Ctrl+C stops."
+  load_sample
+  while sleep 2; do
+    line=$(load_sample)
+    echo "$(date +%T)  $line"
+    load_sample >/dev/null
+  done
+}
+
 case ${1:-} in
   "") report ;;
   suspend-test) suspend_test ;;
   decode-bench) decode_bench ;;
-  *) sed -n '2,5s/^# //p' "$0"; exit 1 ;;
+  load) load_watch ;;
+  *) sed -n '2,6s/^# //p' "$0"; exit 1 ;;
 esac

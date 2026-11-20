@@ -154,7 +154,9 @@ and always reacts to the cable. Set a value only after the suspend test
 showed that the cable wakes it; otherwise a suspended iMac needs its power
 button.
 
-Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
+Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`. During a session
+the journal gets one `load:` line a minute (CPU use, the receiver's share,
+temperatures, fan speed); `odimac-doctor load` shows the same live.
 
 ## Known limits
 
