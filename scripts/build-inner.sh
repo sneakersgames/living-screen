@@ -26,12 +26,28 @@ as_builder() { sudo -u builder env PKGDEST="$REPO" "$@"; }
 # from, and reused by later builds.
 recv_sha=$(git ls-remote "$OPENDISPLAY_REPO" "$OPENDISPLAY_REF" "$OPENDISPLAY_REF^{}" | tail -n1 | cut -c1-12)
 [[ -n $recv_sha ]] || { echo "cannot resolve $OPENDISPLAY_REF in $OPENDISPLAY_REPO" >&2; exit 1; }
-recv_cache=$CACHE/receiver-$recv_sha
+# Our changes to the receiver (patches/opendisplay/*.patch), applied on top.
+# OPENDISPLAY_PATCHES=0 builds the source as it is.
+patches=()
+[[ ${OPENDISPLAY_PATCHES:-1} == 1 ]] && patches=("$SRC"/patches/opendisplay/*.patch)
+[[ -e ${patches[0]:-} ]] || patches=()
+patch_key=
+(( ${#patches[@]} )) && patch_key=-p$(cat "${patches[@]}" | sha256sum | cut -c1-8)
+recv_cache=$CACHE/receiver-$recv_sha$patch_key
 if compgen -G "$recv_cache/*.pkg.tar.zst" >/dev/null; then
-  echo "==> opendisplay-receiver $OPENDISPLAY_REF ($recv_sha): cached"
+  echo "==> opendisplay-receiver $OPENDISPLAY_REF ($recv_sha$patch_key): cached"
 else
   echo "==> opendisplay-receiver from $OPENDISPLAY_REPO @ $OPENDISPLAY_REF ($recv_sha)"
   as_builder git clone --depth 1 --branch "$OPENDISPLAY_REF" "$OPENDISPLAY_REPO" "$WORK/opendisplay"
+  if (( ${#patches[@]} )); then
+    echo "    with ${#patches[@]} patch(es) from patches/opendisplay"
+    # from-checkout.sh packages the committed tree, so the patches are commits.
+    as_builder git -C "$WORK/opendisplay" -c user.name=odimac -c user.email=odimac@localhost \
+      am --quiet "${patches[@]}" || {
+        echo "patches/opendisplay does not apply to $OPENDISPLAY_REF; set OPENDISPLAY_PATCHES=0 to build without" >&2
+        exit 1
+      }
+  fi
   check=--nocheck
   [[ ${RECEIVER_CHECK:-} == 1 ]] && check=
   mkdir -p "$WORK/recv-out"; chown builder "$WORK/recv-out"
