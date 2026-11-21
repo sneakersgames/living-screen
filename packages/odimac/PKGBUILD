@@ -1,6 +1,6 @@
 # The appliance layer: kiosk session, power policy, network setup, installer.
 pkgname=odimac
-pkgver=0.6.4
+pkgver=0.7.0
 pkgrel=1
 pkgdesc="Turns an Intel iMac into an OpenDisplay screen that can also stream games from a PC and be a desktop"
 arch=('any')
@@ -8,10 +8,10 @@ url="https://github.com/peetzweg/opendisplay"
 license=('GPL-3.0-only')
 depends=(
   'opendisplay-receiver'
-  'sway' 'swaybg' 'swayidle' 'polkit' 'nftables'
-  'moonlight-qt' 'qt6-wayland' 'foot' 'ttf-dejavu'   # gaming and terminal modes
+  'hyprland' 'quickshell' 'swayidle' 'polkit' 'nftables'
+  'moonlight-qt' 'qt6-wayland'                       # gaming
   'pipewire' 'pipewire-pulse' 'wireplumber'          # audio for Moonlight and the desktop
-  'hyprland' 'quickshell' 'fuzzel' 'sudo'            # the desktop
+  'foot' 'fuzzel' 'sudo' 'ttf-dejavu'                # the desktop
   'firefox' 'nautilus' 'gvfs' 'ffmpegthumbnailer' 'xdg-user-dirs'
   'xdg-desktop-portal-hyprland' 'xdg-desktop-portal-gtk' 'hyprpolkitagent' 'mako'
   'noto-fonts' 'noto-fonts-emoji'
@@ -24,8 +24,8 @@ install=odimac.install
 _files=(odimac.conf common.sh receiver-loop powerd mode wake-sources sleep-hook
   gpu-reset 90-odimac-gpu-reset.rules odimac-gpu-reset.service
   sysctl.conf
-  desktop-session hyprland.lua shell.qml odimac-desktop.service sudoers odimac-pacman-init.service
-  sway.conf odimac-kiosk.service pam-odimac-kiosk sysusers.conf tmpfiles.conf
+  game hyprland.lua shell.qml sudoers odimac-pacman-init.service
+  odimac-kiosk.service pam-odimac-kiosk sysusers.conf tmpfiles.conf
   polkit.rules 10-odimac-thunderbolt.network 15-odimac-ethernet.network
   modules-load.conf mkinitcpio.conf logind.conf firewall.nft odimac-firewall.service odimac-doctor odimac-install)
 source=("${_files[@]}")
@@ -34,13 +34,12 @@ sha256sums=($(printf 'SKIP %.0s' "${_files[@]}"))
 package() {
   install -Dm644 odimac.conf "$pkgdir/etc/odimac/odimac.conf"
   install -Dm644 common.sh "$pkgdir/usr/lib/odimac/common.sh"
-  install -Dm755 receiver-loop powerd mode wake-sources desktop-session gpu-reset -t "$pkgdir/usr/lib/odimac"
+  install -Dm755 receiver-loop powerd mode wake-sources game gpu-reset -t "$pkgdir/usr/lib/odimac"
   install -Dm644 90-odimac-gpu-reset.rules -t "$pkgdir/usr/lib/udev/rules.d"
   install -Dm755 sleep-hook "$pkgdir/usr/lib/systemd/system-sleep/odimac-wake"
-  install -Dm644 sway.conf "$pkgdir/usr/share/odimac/sway.conf"
   install -Dm644 hyprland.lua "$pkgdir/usr/share/odimac/hyprland.lua"
   install -Dm644 shell.qml "$pkgdir/usr/share/odimac/quickshell/shell.qml"
-  install -Dm644 odimac-kiosk.service odimac-desktop.service odimac-firewall.service \
+  install -Dm644 odimac-kiosk.service odimac-firewall.service \
     odimac-pacman-init.service odimac-gpu-reset.service -t "$pkgdir/usr/lib/systemd/system"
   install -dm750 "$pkgdir/etc/sudoers.d"
   install -m440 sudoers "$pkgdir/etc/sudoers.d/10-odimac"

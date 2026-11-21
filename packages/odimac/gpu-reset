@@ -1,10 +1,8 @@
 #!/bin/bash
-# Run once per graphics card reset (90-odimac-gpu-reset.rules): the sessions
-# that were running cannot draw any more, so start the kiosk afresh. The
-# desktop, if it was open, is closed and its programs with it; there is no
-# saving them. After https://github.com/ahmadtv/omarchy-imac18-3.
+# Run once per graphics card reset (90-odimac-gpu-reset.rules): the session
+# that was running cannot draw any more, so start it afresh. Open programs
+# are closed by that; there is no saving them. After
+# https://github.com/ahmadtv/omarchy-imac18-3.
 echo "graphics card was reset: restarting the display session" | systemd-cat -t odimac-powerd -p warning
 sleep 2 # let the driver finish first
-systemctl stop odimac-desktop.service
-chvt 1
 systemctl restart odimac-kiosk.service

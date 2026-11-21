@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Exercises packages/odimac/powerd against a fake sysfs and stubbed
-# swaymsg/ss/systemctl. No hardware or root needed:  tests/powerd-test.sh
+# hyprctl/ss/systemctl. No hardware or root needed:  tests/powerd-test.sh
 set -u
 here=$(cd "$(dirname "$0")/.." && pwd)
 t=$(mktemp -d); trap 'kill "$pid" 2>/dev/null; rm -rf "$t"' EXIT
 mkdir -p "$t/bin" "$t/lib" "$t/run" "$t/sys/class/net/lo"
 cp "$here/packages/odimac/common.sh" "$t/lib/"
 printf 'PANEL_OFF_DELAY=3\nSUSPEND_AFTER=6\n' > "$t/conf"
-cat > "$t/bin/swaymsg" <<S
+cat > "$t/bin/hyprctl" <<S
 #!/bin/sh
 echo "\$*" >> "$t/panel.log"
+echo ok
 S
 cat > "$t/bin/ss" <<S
 #!/bin/sh
@@ -24,11 +25,11 @@ chmod +x "$t/bin/"*
 : > "$t/panel.log"; : > "$t/systemctl.log"
 
 PATH="$t/bin:$PATH" ODIMAC_CONF="$t/conf" ODIMAC_LIB="$t/lib" ODIMAC_SYSFS="$t/sys" ODIMAC_RUN="$t/run" \
-  ODIMAC_POLL=0.2 ODIMAC_LOAD_INTERVAL=2 "$here/packages/odimac/powerd" 2> "$t/powerd.log" &
+  ODIMAC_POLL=0.2 ODIMAC_LOAD_INTERVAL=2 HYPRLAND_INSTANCE_SIGNATURE=test ODIMAC_NO_SESSION_CHECK=1 "$here/packages/odimac/powerd" 2> "$t/powerd.log" &
 pid=$!
 
 fail=0
-panel() { tail -n1 "$t/panel.log" | awk '{print $NF}'; }
+panel() { tail -n1 "$t/panel.log" | sed -n 's/^eval odimac\.panel("\(.*\)")$/\1/p'; }
 expect() { # description, expected panel state
   if [[ $(panel) == "$2" ]]; then echo "ok   $1"; else echo "FAIL $1: panel is '$(panel)', want '$2'"; fail=1; fi
 }

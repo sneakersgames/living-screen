@@ -1,17 +1,8 @@
-// What the kiosk user may do without being asked for a password.
+// The kiosk user may suspend the machine (odimac-powerd, SUSPEND_AFTER).
 polkit.addRule(function (action, subject) {
-  if (subject.user != "odimac") return;
-  // Suspend the machine (odimac-powerd, SUSPEND_AFTER).
-  if (action.id == "org.freedesktop.login1.suspend" ||
-      action.id == "org.freedesktop.login1.suspend-multiple-sessions") {
-    return polkit.Result.YES;
-  }
-  // Switch between the kiosk session and the desktop (/usr/lib/odimac/mode).
-  if (action.id == "org.freedesktop.login1.chvt") {
-    return polkit.Result.YES;
-  }
-  if (action.id == "org.freedesktop.systemd1.manage-units" &&
-      action.lookup("unit") == "odimac-desktop.service") {
+  if (subject.user == "odimac" &&
+      (action.id == "org.freedesktop.login1.suspend" ||
+       action.id == "org.freedesktop.login1.suspend-multiple-sessions")) {
     return polkit.Result.YES;
   }
 });

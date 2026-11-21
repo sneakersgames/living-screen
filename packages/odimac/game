@@ -1,0 +1,34 @@
+#!/bin/bash
+# Gaming mode's program: Moonlight, streaming from a PC that runs Sunshine or
+# Apollo. Started by the session the first time the mode is chosen
+# (odimac.mode in hyprland.lua); when Moonlight is quit, the session returns
+# to the Mac's display.
+. "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
+trap 'hypr eval "odimac.ended(\"game\")" >/dev/null' EXIT
+
+# Runs Moonlight and tells the session that its windows belong to this mode.
+moonlight_run() {
+  moonlight "$@" &
+  hypr eval "odimac.pid($!, \"game\")" >/dev/null
+  wait $!
+}
+
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/Moonlight Game Streaming Project/Moonlight.conf"
+if [[ ! -e $conf ]]; then
+  # Moonlight's own default is 1080p.
+  mkdir -p "${conf%/*}"
+  printf '[General]\nwidth=%s\nheight=%s\nfps=%s\n' \
+    "${GAME_RESOLUTION%x*}" "${GAME_RESOLUTION#*x}" "$GAME_FPS" > "$conf"
+fi
+export QT_QPA_PLATFORM=wayland
+if [[ -n $GAME_HOST ]]; then
+  started=$SECONDS
+  echo "streaming \"$GAME_APP\" from $GAME_HOST at $GAME_RESOLUTION, $GAME_FPS fps" >&2
+  moonlight_run stream "$GAME_HOST" "$GAME_APP" --resolution "$GAME_RESOLUTION" \
+    --fps "$GAME_FPS" --display-mode fullscreen
+  # A stream that ended at once did not start (PC off, not paired yet): show
+  # Moonlight itself, which says why and can pair.
+  (( SECONDS - started >= GAME_MIN_SESSION )) && exit 0
+  echo "the stream ended within ${GAME_MIN_SESSION}s, opening Moonlight" >&2
+fi
+moonlight_run

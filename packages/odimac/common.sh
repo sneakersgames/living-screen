@@ -15,14 +15,32 @@ GAME_RESOLUTION="2560x1440"
 GAME_FPS=60
 GAME_MIN_SESSION=15
 MODE_IDLE_RETURN=600
-# Virtual terminals of the kiosk session and of the desktop, as in their
-# service files (tty2 is the console login).
-KIOSK_VT=1
-DESKTOP_VT=3
 ODIMAC_CONF="${ODIMAC_CONF:-/etc/odimac/odimac.conf}"
 # shellcheck disable=SC1090
 [[ -r "$ODIMAC_CONF" ]] && . "$ODIMAC_CONF"
 : "${RECEIVER_NAME:=$(cat /proc/sys/kernel/hostname 2>/dev/null || echo iMac)}"
+
+# --- the display session (Hyprland) -----------------------------------------
+# hypr ARGS: hyprctl against the appliance's session, from inside it or, as
+# root or the kiosk user, from a console.
+hypr() {
+  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+    hyprctl "$@"
+    return
+  fi
+  local uid
+  uid=$(id -u odimac 2>/dev/null) || return 1
+  if (( EUID == uid )); then
+    XDG_RUNTIME_DIR="/run/user/$uid" hyprctl -i 0 "$@"
+  else
+    runuser -u odimac -- env XDG_RUNTIME_DIR="/run/user/$uid" hyprctl -i 0 "$@"
+  fi
+}
+# True while the session this script was started by is still there.
+session_running() {
+  [[ -n ${ODIMAC_NO_SESSION_CHECK:-} ]] && return 0
+  [[ -S ${XDG_RUNTIME_DIR:-/nonexistent}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:-none}/.socket.sock ]]
+}
 
 # --- load monitoring -------------------------------------------------------
 # load_sample prints one line describing the time since its previous call:

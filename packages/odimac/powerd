@@ -1,18 +1,17 @@
 #!/bin/bash
-# Panel and suspend policy for the kiosk session. Runs inside sway.
+# Panel and suspend policy for the display session. Runs inside Hyprland.
 #
 #   panel on   while a sender is connected, and for PANEL_OFF_DELAY seconds
 #              after boot, resume, a cable plug-in or the end of a session;
-#              and for as long as the gaming, desktop or terminal mode is
-#              showing
-#   panel off  otherwise (output power off: backlight dark, machine idle)
+#              and for as long as gaming or the desktop is showing
+#   panel off  otherwise (display power off: backlight dark, machine idle)
 #   suspend    optional, only with no cable, no session and the display
 #              mode showing (SUSPEND_AFTER)
 #
 # "Cable" is a thunderbolt-net interface: the kernel creates one when the
 # far end of the Thunderbolt cable is a computer. "Session" is an established
-# TCP connection to the receiver's port. The mode is what
-# /usr/lib/odimac/mode last switched to.
+# TCP connection to the receiver's port. The mode is the environment whose
+# workspace is showing, as hyprland.lua records it.
 . "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
 SYSFS="${ODIMAC_SYSFS:-/sys}"
 POLL="${ODIMAC_POLL:-1}"
@@ -36,10 +35,11 @@ session_active() {
 
 current_mode() { cat "$MODE_FILE" 2>/dev/null || echo display; }
 
+panel_power() { [[ $(hypr eval "odimac.panel(\"$1\")" 2>/dev/null) == ok* ]]; }
 panel=unknown
 set_panel() {
   [[ $panel == "$1" ]] && return
-  if swaymsg -q "output * power $1"; then
+  if panel_power "$1"; then
     panel=$1
     log "panel $1 ($2)"
   fi
@@ -54,7 +54,7 @@ fi
 stitch=$(cat "$SYSFS/module/amdgpu/parameters/tiled_stitch" 2>/dev/null)
 if [[ $PANEL_POWER_CYCLE == 1 || ( $PANEL_POWER_CYCLE == auto && $stitch == 1 ) ]]; then
   sleep 3
-  swaymsg -q "output * power off" && sleep 2 && swaymsg -q "output * power on" && log "panel power-cycled (5K driver)"
+  panel_power off && sleep 2 && panel_power on && log "panel power-cycled (5K driver)"
 fi
 
 now=$(date +%s)
@@ -67,7 +67,7 @@ load_logged=0
 LOAD_LOG_INTERVAL=${ODIMAC_LOAD_INTERVAL:-60}
 log "started (panel off after ${PANEL_OFF_DELAY}s idle, suspend after ${SUSPEND_AFTER}s)"
 
-while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
+while session_running; do
   prev=$now
   now=$(date +%s)
   # A jump in the clock means the machine slept: start over as after boot.
@@ -95,9 +95,6 @@ while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
   mode=$(current_mode)
   if [[ $mode != "$had_mode" ]]; then
     log "mode $mode"
-    # The desktop is another compositor on another virtual terminal, and
-    # what this one last did to the panel no longer holds: say it again.
-    panel=unknown
     # Back on the Mac's display: wait for a sender as after a session.
     [[ $mode == display ]] && lit_until=$((now + PANEL_OFF_DELAY))
   fi

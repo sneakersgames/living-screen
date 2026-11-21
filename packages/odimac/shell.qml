@@ -1,7 +1,7 @@
-// The desktop's bar: workspaces, three programs to start, the focused window, the appliance's three
-// environments, volume and clock. Run by hyprland.lua as
-// `qs -p /usr/share/odimac/quickshell` (this file is shell.qml there). To use your own instead, start it
-// from ~/.config/hypr/odimac.lua.
+// The desktop's bar: workspaces, three programs to start, the focused window,
+// the appliance's three environments, volume and clock. Run by hyprland.lua
+// as `qs -p /usr/share/odimac/quickshell` (this file is shell.qml there). It
+// is hidden on the Mac display and in gaming, which fill the screen.
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -18,8 +18,13 @@ ShellRoot {
     readonly property color raised: "#363a4f"
     readonly property string font: "DejaVu Sans"
 
+    // The environment showing: the receiver's and Moonlight's workspaces are
+    // named, the desktop's are numbered.
+    readonly property string wsName: Hyprland.focusedWorkspace?.name ?? ""
+    readonly property bool onDesktop: wsName !== "display" && wsName !== "game"
+
     function mode(name) {
-        Quickshell.execDetached(["systemd-cat", "-t", "odimac-mode", "/usr/lib/odimac/mode", name]);
+        Quickshell.execDetached(["hyprctl", "eval", "odimac.mode(\"" + name + "\")"]);
     }
 
     // Keeps the default sink's volume readable.
@@ -66,6 +71,7 @@ ShellRoot {
         PanelWindow {
             required property var modelData
             screen: modelData
+            visible: root.onDesktop
             anchors {
                 top: true
                 left: true

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Checks the desktop's configuration as far as that goes without a graphics
-# card: Hyprland parses its config, and the Quickshell bar loads in a
+# Checks the session's configuration as far as that goes without a graphics
+# card: Hyprland parses its config (which also checks the arguments of every
+# dispatcher in it), and the Quickshell bar loads in a
 # headless sway. Needs Hyprland, quickshell and sway; skips itself without
 # them, and as root (Hyprland refuses to run):  tests/desktop-test.sh
 set -u

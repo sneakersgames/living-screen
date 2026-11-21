@@ -12,8 +12,11 @@ one key press apart:
 The keys are pressed on a keyboard attached to the iMac and work everywhere,
 also during a game. They are the **number keys**: Ctrl+Alt+F1, F2 and F3 are
 something else (Linux's virtual terminals; F2 is a console, and F1 returns
-from it, after which the number keys work again). **Ctrl+Alt+4** opens a
-bare terminal, for when the desktop does not start.
+from it, after which the number keys work again).
+
+All three run in one Hyprland session, each on workspaces of its own, so
+changing between them is a change of workspace: nothing is stopped, and
+nothing has to take the screen over from anything else.
 
 The keyboard's brightness and volume keys work in all three, and act on the
 iMac.
@@ -42,7 +45,8 @@ Runs on a real iMac18,3 from the live stick.
 | Gaming, picture and input | confirmed with Apollo on the PC |
 | Brightness | confirmed |
 | Sound from the speakers | confirmed |
-| Desktop (Hyprland, the bar, switching to and from it) | confirmed; Firefox, the file manager and the Omarchy keys are new |
+| Desktop (Hyprland, the bar, Firefox, the file manager) | confirmed as a session of its own |
+| All three environments in one Hyprland session | **not tested on the iMac** (version 0.7.0) |
 | Installer | **not tested on the iMac** |
 | Suspend | does not work, see "Known limits" |
 
@@ -51,9 +55,9 @@ Runs on a real iMac18,3 from the live stick.
 | Piece | What it does |
 |---|---|
 | `opendisplay-receiver` | Upstream's Linux receiver, built from a release tag |
-| `odimac-kiosk.service` | Starts `sway` on tty1 as user `odimac`, at scale 2, with nothing but the receiver in it |
-| `mode` | Switches between the environments: `display` (the receiver), `game` (Moonlight) and `shell` (a terminal) are workspaces of that sway; `desktop` is a session of its own |
-| `odimac-desktop.service` | The desktop: Hyprland (`hyprland.lua`) and the Quickshell bar (`shell.qml`) on tty3, as the same user, started by Ctrl+Alt+3 |
+| `odimac-kiosk.service` | Starts Hyprland on tty1 as user `odimac`, at scale 2, with `hyprland.lua`: the receiver full screen on workspace `display`, Moonlight on `game`, the desktop on workspaces 1 to 10 |
+| `hyprland.lua` | The session's configuration and the switching between the environments; `shell.qml` is the desktop's Quickshell bar |
+| `mode`, `game` | `mode display\|game\|desktop` switches from a script or terminal; `game` runs Moonlight |
 | `odimac-powerd` | Lights the panel while a sender is connected, a cable was just plugged in, or another environment than the Mac display is showing; darkens it otherwise, optionally suspends |
 | `10-odimac-thunderbolt.network` | Link-local addresses on the Thunderbolt link, which is how the Mac recognises a direct cable |
 | `odimac-doctor` | Reports on panel, hardware decoding, Thunderbolt and the receiver; runs the suspend test and a decode benchmark |
@@ -202,7 +206,7 @@ focused window's title, buttons for the other two environments, volume
 | **Cmd+−**, **Cmd+=** | Narrower, wider (with Shift: shorter, taller) |
 | **Cmd+G** | Group windows as tabs (**Cmd+Alt+Tab** goes through them) |
 | **Cmd+S** | Scratchpad: a workspace that slides over the others |
-| **Cmd+Shift+E** | Log out: closes every program and returns to the Mac display |
+| **Cmd+Shift+Esc** | Start the whole session afresh: closes every program, the Mac's display and Moonlight included |
 
 Windows can also be moved and resized with the mouse: Cmd and the left or
 right button, or by their borders. The keys and the look are
@@ -212,7 +216,9 @@ Files and Terminal also have buttons in the bar.
 Cmd is the Windows key on a PC keyboard.
 
 - **Leaving and coming back.** Ctrl+Alt+1 and Ctrl+Alt+2 leave the desktop
-  running with its programs open; Ctrl+Alt+3 brings it back as it was. After
+  as it is, with its programs open; Ctrl+Alt+3 brings it back on the
+  workspace it was left on. A program started from the Mac display or from
+  gaming (Cmd+Space works there too) opens on the desktop. After
   ten minutes without input it returns to the Mac display by itself
   (`MODE_IDLE_RETURN`; a playing video does not count as idle), and the panel
   goes dark a minute later if no Mac is connected.
@@ -235,13 +241,11 @@ Cmd is the Windows key on a PC keyboard.
   anything in it. Hyprland is configured in Lua these days; see
   [its wiki](https://wiki.hypr.land/configuring/). The bar is
   `/usr/share/odimac/quickshell/shell.qml`.
-- **If it does not start,** Ctrl+Alt+3 falls back to the Mac display. The
-  reason is in `journalctl -b -u odimac-desktop`, and Hyprland's own log in
-  `/run/user/*/hypr/*/hyprland.log`.
 
-The desktop is a second compositor on its own virtual terminal (tty3) beside
-the kiosk session on tty1, so Ctrl+Alt+F1 and Ctrl+Alt+F3 also switch between
-them. Ctrl+Alt+F2 is the console login.
+The bar belongs to the desktop: it is hidden on the Mac display and in
+gaming, which fill the screen. If the session itself does not come up, the
+reason is in `journalctl -b -u odimac-kiosk`, and Hyprland's own log in
+`/run/user/*/hypr/*/hyprland.log`.
 
 ## Install
 
@@ -296,11 +300,10 @@ An iMac with a Fusion Drive shows two disks; install onto the SSD.
 | `GAME_HOST` | empty | The gaming PC's address; empty opens Moonlight's own interface |
 | `GAME_APP` | `Desktop` | What to stream with `GAME_HOST` set |
 | `GAME_RESOLUTION`, `GAME_FPS` | `2560x1440`, `60` | Stream size and rate |
-| `MODE_IDLE_RETURN` | `600` | Seconds without input before gaming, the desktop and the terminal return to the Mac display; `0` never |
+| `MODE_IDLE_RETURN` | `600` | Seconds without input before gaming and the desktop return to the Mac display; `0` never |
 | `PANEL_POWER_CYCLE` | `auto` | See "The 5K driver" |
 
-Overrides for the kiosk's compositor, such as another scale, go in
-`/etc/odimac/sway.d/*.conf`; for the desktop's, in
+Changes to the session itself, such as another scale or other keys, go in
 `~/.config/hypr/odimac.lua`.
 
 With `SUSPEND_AFTER=0` the iMac never sleeps: with the panel dark it idles,
@@ -343,20 +346,17 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
-- **Frozen picture, dead keyboard, on an installed iMac.** The log showed
-  the 5K graphics driver crashing (`dm_update_crtc_state`) at the moment the
-  text console first took the screen, which on a quiet system is the first
-  switch to the console (Ctrl+Alt+F2) or shutdown. The crash leaves the
-  display locked for good. New installations start with `fbcon=nodefer`,
-  which has the console take the screen at start instead, as it always did
-  on the live stick. An iMac installed before that gets it with
-
-  ```bash
-  sed -i '/^options/ s/$/ fbcon=nodefer/' /boot/loader/entries/odimac.conf
-  ```
-
-  and a restart. Whether this ends every freeze is not confirmed yet;
-  `odimac-doctor last-start` shows the last lines logged before a stop.
+- **Do not use the console (Ctrl+Alt+F2) on an installed iMac unless you
+  have to.** Freezes with a still picture and a dead keyboard were seen
+  there. The one that was caught in the log is the 5K graphics driver
+  crashing (`dm_update_crtc_state`) when the text console takes the screen;
+  another came from handing the screen from one compositor to a second one,
+  which is why everything now runs in a single session. Installations start
+  with `fbcon=nodefer`, which has the console take the screen once at start,
+  as on the live stick. Whether a later switch to the console is safe has
+  not been confirmed. The desktop's terminal with `su` or `sudo` does
+  everything the console does; after a stop and a restart,
+  `odimac-doctor last-start` shows the last lines logged before it.
 - **No Wi-Fi and no Bluetooth set-up**, on the desktop either.
 - **Sound needs its own driver.** The 2017 iMac's audio chip (Cirrus
   CS8409 with a CS42L83) gets no sound out of the kernel's own driver. The
@@ -391,11 +391,10 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
   ```
 
   The stock driver (3840x2160) is used from the next boot.
-- **Half the picture stretched across the panel:** the kiosk session and
-  the desktop each power-cycle the panel once when they start to correct
-  this (`PANEL_POWER_CYCLE`); if it still happens, `systemctl restart
-  odimac-kiosk`, or on the desktop log out (Cmd+Shift+E) and press Ctrl+Alt+3
-  again.
+- **Half the picture stretched across the panel:** the session
+  power-cycles the panel once when it starts to correct this
+  (`PANEL_POWER_CYCLE`); if it still happens, press Cmd+Shift+Esc or run
+  `systemctl restart odimac-kiosk`.
 - **The kernel stays as it is.** The image's `pacman.conf` leaves `linux`
   out of `pacman -Syu` (`IgnorePkg`), because the driver package fits one
   exact kernel. The patches support the 7.1 and 7.2 series only. To build an image with Arch's current kernel and the stock
@@ -410,19 +409,22 @@ tests/powerd-test.sh
 runs the panel and suspend policy against a fake sysfs.
 
 ```bash
-tests/mode-test.sh
+tests/session-test.sh
 ```
 
-runs the sway config and the mode switching in a headless sway, with
-terminals standing in for Moonlight and the receiver and stubs for the
-desktop's service (needs `sway`, `foot` and `jq`; skips itself without
-them).
+loads `hyprland.lua` against a stand-in for Hyprland's Lua API and replays
+key presses, window and idle events through it (needs `lua`), and runs the
+`mode` and `game` scripts with `hyprctl` and Moonlight stubbed.
 
 ```bash
 tests/desktop-test.sh
 ```
 
-has Hyprland parse `hyprland.lua` and loads the bar in a headless sway
-(needs `Hyprland`, `quickshell` and `sway`). It cannot start Hyprland
-itself, which needs a graphics card. To update an
-installed iMac, copy `out/odimac-*.pkg.tar.zst` over and `pacman -U` it.
+has Hyprland parse `hyprland.lua`, which also checks the arguments of the
+dispatchers in it, and loads the bar in a headless sway (needs `Hyprland`,
+`quickshell` and `sway`). Neither test can start Hyprland itself, which
+needs a graphics card: what the session does on the iMac is only known from
+the iMac.
+
+To update an installed iMac, copy `out/odimac-*.pkg.tar.zst` over, `pacman
+-U` it and restart.

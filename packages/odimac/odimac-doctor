@@ -9,7 +9,6 @@
 
 h() { printf '\n== %s ==\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
-sway_sock() { ls /run/user/*/sway-ipc.*.sock 2>/dev/null | head -n1; }
 
 report() {
   h "Machine"
@@ -30,14 +29,13 @@ report() {
     "") echo "5K driver: not installed, stock amdgpu (expect 3840x2160 above)" ;;
     *) echo "5K driver: installed but tiled_stitch=$stitch" ;;
   esac
-  sock=$(sway_sock)
-  if [[ -n $sock ]]; then
-    SWAYSOCK=$sock swaymsg -p -t get_outputs 2>/dev/null | sed -n "1,5p"
+  if mons=$(hypr monitors 2>/dev/null) && [[ $mons == Monitor* ]]; then
+    sed -n '1,2p' <<<"$mons" | sed 's/^\s*//'
+    grep -m1 -E '^\s*dpmsStatus' <<<"$mons" | sed 's/^\s*dpmsStatus: 1/panel: on/; s/^\s*dpmsStatus: 0/panel: off (idle)/'
   else
-    echo "kiosk session: NOT running (journalctl -b -u odimac-kiosk)"
+    echo "display session: NOT running (journalctl -b -u odimac-kiosk)"
   fi
-  echo "mode: $(cat /run/user/*/odimac-mode 2>/dev/null || echo display)  (Ctrl+Alt+1 display, +2 gaming, +3 desktop, +4 terminal)"
-  echo "desktop: $(systemctl is-active odimac-desktop.service 2>/dev/null)  (journalctl -b -u odimac-desktop)"
+  echo "mode: $(/usr/lib/odimac/mode status)  (Ctrl+Alt+1 Mac display, +2 gaming, +3 desktop)"
   bl=$(ls /sys/class/backlight 2>/dev/null | tr '\n' ' ')
   echo "backlight control: ${bl:-none (BRIGHTNESS has no effect)}"
 

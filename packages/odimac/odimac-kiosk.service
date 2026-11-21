@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenDisplay kiosk session (sway + od-receiver)
+Description=OpenDisplay iMac session (Hyprland: Mac display, gaming, desktop)
 After=systemd-user-sessions.service dbus.socket systemd-logind.service getty@tty1.service
 Wants=dbus.socket systemd-logind.service
 Conflicts=getty@tty1.service
@@ -19,8 +19,10 @@ StandardError=journal
 UtmpIdentifier=tty1
 UtmpMode=user
 Environment=XDG_SESSION_TYPE=wayland
-Environment=XDG_CURRENT_DESKTOP=sway
-ExecStart=/usr/bin/sway --config /usr/share/odimac/sway.conf
+Environment=XDG_CURRENT_DESKTOP=Hyprland
+Environment=XDG_SESSION_DESKTOP=Hyprland
+WorkingDirectory=~
+ExecStart=/usr/bin/Hyprland --config /usr/share/odimac/hyprland.lua
 Restart=always
 RestartSec=2
 

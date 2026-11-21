@@ -1,14 +1,15 @@
 #!/bin/bash
-# Runs od-receiver forever inside the kiosk session.
-. /usr/lib/odimac/common.sh
+# Runs od-receiver forever inside the display session.
+. "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
 args=(--name "$RECEIVER_NAME" --device "$RECEIVER_DEVICE" --listen "0.0.0.0:$RECEIVER_PORT" --decoder "$RECEIVER_DECODER")
 [[ $RECEIVER_HEVC == 1 ]] || args+=(--no-hevc)
 read -ra extra <<<"$RECEIVER_EXTRA_ARGS"
 # Ends with the compositor, so a restarted session starts clean.
-while [[ -S ${SWAYSOCK:-} ]]; do
+while session_running; do
   od-receiver "${args[@]}" "${extra[@]}" &
-  # Its window belongs on the "display" workspace whichever mode is showing.
-  swaymsg -q "for_window [pid=$!] move container to workspace display"
+  # Its window belongs on the "display" workspace, full screen, whichever
+  # mode is showing (hyprland.lua).
+  hypr eval "odimac.pid($!, \"display\")" >/dev/null
   wait $!
   echo "od-receiver exited ($?), restarting" >&2
   sleep 2
