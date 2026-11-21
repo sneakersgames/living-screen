@@ -46,7 +46,8 @@ Runs on a real iMac18,3 from the live stick.
 | Brightness | confirmed |
 | Sound from the speakers | confirmed |
 | Desktop (Hyprland, the bar, Firefox, the file manager) | confirmed as a session of its own |
-| All three environments in one Hyprland session | **not tested on the iMac** (version 0.7.0) |
+| All three environments in one Hyprland session | starts and switches; froze when leaving a game (the driver bug under "Known limits") |
+| The driver fix for the freezes (`odimac` 0.7.1, `odimac-amdgpu5k` release 2) | **not tested on the iMac** |
 | Installer | **not tested on the iMac** |
 | Suspend | does not work, see "Known limits" |
 
@@ -92,6 +93,9 @@ This produces `out/odimac-<date>-x86_64.iso` and the `odimac` packages.
   when what they are made from changes. Delete `out/cache` to start over.
 - **The sound driver** is compiled the same way and cached; it takes a
   minute.
+- **Our own fixes to the 5K driver** are in `patches/amdgpu` and applied
+  after the community patches. Changing them rebuilds the driver (the slow
+  part of a first build).
 - **Other receiver source:** it is built from upstream tag `v1.30.3` plus
   the patches in `patches/opendisplay`; set `OPENDISPLAY_REPO` and
   `OPENDISPLAY_REF` for a fork or another tag, and `OPENDISPLAY_PATCHES=0`
@@ -346,17 +350,29 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
-- **Do not use the console (Ctrl+Alt+F2) on an installed iMac unless you
-  have to.** Freezes with a still picture and a dead keyboard were seen
-  there. The one that was caught in the log is the 5K graphics driver
-  crashing (`dm_update_crtc_state`) when the text console takes the screen;
-  another came from handing the screen from one compositor to a second one,
-  which is why everything now runs in a single session. Installations start
-  with `fbcon=nodefer`, which has the console take the screen once at start,
-  as on the live stick. Whether a later switch to the console is safe has
-  not been confirmed. The desktop's terminal with `su` or `sudo` does
-  everything the console does; after a stop and a restart,
-  `odimac-doctor last-start` shows the last lines logged before it.
+- **The freezes (still picture, dead keyboard, then the whole machine)**
+  were traced to one bug in the 5K driver patches: `kernel BUG at
+  amdgpu_dm.c:13878`, in `dm_update_crtc_state`. It was hit by any request
+  for a modeset of the already running panel that changes nothing the panel
+  is sent. Seen in the logs: Hyprland changing the HDR metadata just after
+  Moonlight started, and the text console taking the screen at shutdown. A
+  second compositor taking over the screen, and Ctrl+Alt+F2, go the same
+  way. The crash happens with the display's locks held, so the picture
+  stays, input stops, and other parts of the kernel follow.
+
+  Two changes answer it. `patches/amdgpu/0001-tiled-stitch-logical-modeset.patch`
+  fixes the driver: such a request is recognised before anything is taken
+  down, and no longer reaches the failing line. And `hyprland.lua` stops
+  Hyprland from changing HDR, content type or direct scanout when a window
+  goes full screen or leaves it. The driver compiles with the fix; that the
+  freezes are gone is **not confirmed on the iMac yet**, and until it is,
+  Ctrl+Alt+F2 on an installed iMac is best avoided (the desktop's terminal
+  with `su` or `sudo`, or ssh, does the same).
+
+  `odimac-doctor` says under "Trouble" whether the installed driver has the
+  fix, and lists the crash if it was logged. After a stop and a restart,
+  `odimac-doctor last-start` shows the last lines logged before it; over
+  ssh, `journalctl -k -b -1` has all of it.
 - **No Wi-Fi and no Bluetooth set-up**, on the desktop either.
 - **Sound needs its own driver.** The 2017 iMac's audio chip (Cirrus
   CS8409 with a CS42L83) gets no sound out of the kernel's own driver. The
@@ -426,5 +442,22 @@ dispatchers in it, and loads the bar in a headless sway (needs `Hyprland`,
 needs a graphics card: what the session does on the iMac is only known from
 the iMac.
 
-To update an installed iMac, copy `out/odimac-*.pkg.tar.zst` over, `pacman
--U` it and restart.
+### Updating an installed iMac
+
+Over ssh, which is also the way to read its logs. Once, on the iMac as root:
+`systemctl enable --now sshd`, and your public key in
+`/root/.ssh/authorized_keys` (`ssh-copy-id` from the other machine; it needs
+`PermitRootLogin yes` in a file under `/etc/ssh/sshd_config.d/` for that one
+password login). `ip -4 -brief addr` shows the iMac's address.
+
+```bash
+scp out/odimac-*.pkg.tar.zst root@IMAC:/root/
+```
+
+```bash
+ssh root@IMAC 'pacman -U --noconfirm /root/odimac-*.pkg.tar.zst && mkinitcpio -P && reboot'
+```
+
+`mkinitcpio -P` matters whenever the graphics driver package
+(`odimac-amdgpu5k`) changed: the driver is loaded from the initramfs, and
+without it the old one keeps running.

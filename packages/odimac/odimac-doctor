@@ -74,10 +74,20 @@ report() {
   # Graphics card hangs and kernel faults, in this start and the one before.
   for b in 0 -1; do
     journalctl -k -b "$b" --no-pager -o short 2>/dev/null |
-      grep -i -E 'amdgpu.*(timeout|reset|hang|fail)|ring .* timeout|\bBUG:|Oops|panic|hard lockup|soft lockup|graphics card was reset' |
+      grep -i -E 'amdgpu.*(timeout|reset|hang|fail)|ring .* timeout|kernel BUG|\bBUG:|Oops|TILED_STITCH: logical modeset|panic|hard lockup|soft lockup|graphics card was reset' |
       tail -n 8 | cut -c1-170 | sed "s/^/[start $b] /"
   done
   echo "(nothing above this line: no graphics or kernel faults were logged)"
+  echo "('kernel BUG at ...amdgpu_dm.c' is the 5K driver crash behind the freezes; 'logical modeset"
+  echo " of live root needs no reprogramming' is the fixed driver stepping around it)"
+  drv=/usr/lib/modules/$(uname -r)/updates/amdgpu.ko.zst
+  if [[ -e $drv ]]; then
+    if zstdcat "$drv" 2>/dev/null | grep -qa 'logical modeset of live root'; then
+      echo "5K driver: has the fix for that crash"
+    else
+      echo "5K driver: WITHOUT the fix for that crash (update odimac-amdgpu5k, then mkinitcpio -P)"
+    fi
+  fi
 
   h "Network (gaming)"
   for n in /sys/class/net/e*; do
