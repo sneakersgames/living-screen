@@ -343,6 +343,12 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
+- **A frozen picture that takes no input** has been seen once, in
+  Moonlight's menu; the cause is not known yet. `odimac-doctor` lists
+  graphics card and kernel faults of this start and the previous one under
+  "Trouble". If the graphics card hangs and the driver resets it, the display
+  session is restarted by itself (`odimac-gpu-reset.service`); an open
+  desktop is closed by that.
 - **No Wi-Fi and no Bluetooth set-up**, on the desktop either.
 - **Sound needs its own driver.** The 2017 iMac's audio chip (Cirrus
   CS8409 with a CS42L83) gets no sound out of the kernel's own driver. The

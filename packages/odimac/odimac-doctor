@@ -71,6 +71,15 @@ report() {
     echo "PipeWire: NOT running for the display session (as user odimac: systemctl --user status pipewire.socket)"
   fi
 
+  h "Trouble"
+  # Graphics card hangs and kernel faults, in this start and the one before.
+  for b in 0 -1; do
+    journalctl -k -b "$b" --no-pager -o short 2>/dev/null |
+      grep -i -E 'amdgpu.*(timeout|reset|hang|fail)|ring .* timeout|\bBUG:|Oops|panic|hard lockup|soft lockup|graphics card was reset' |
+      tail -n 8 | cut -c1-170 | sed "s/^/[start $b] /"
+  done
+  echo "(nothing above this line: no graphics or kernel faults were logged)"
+
   h "Thunderbolt"
   if [[ -d /sys/bus/thunderbolt/devices ]]; then
     for d in /sys/bus/thunderbolt/devices/*; do

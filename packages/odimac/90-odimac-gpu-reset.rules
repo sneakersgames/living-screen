@@ -1,0 +1,4 @@
+# After amdgpu has recovered the graphics card from a hang it says so on the
+# card device (WEDGED=none). The compositors that were running have lost
+# their video memory by then and show a frozen or black picture for good.
+ACTION=="change", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DRIVERS=="amdgpu", ENV{WEDGED}=="none", RUN+="/usr/bin/systemctl --no-block start odimac-gpu-reset.service"
