@@ -1,0 +1,67 @@
+#!/bin/bash
+# Switches what the panel shows. Each mode is a sway workspace:
+#
+#   mode display   the OpenDisplay receiver (the default)
+#   mode game      Moonlight, streaming games from a PC; started on first use
+#   mode shell     a terminal
+#   mode status    prints the current mode
+#   mode watch     returns to "display" after MODE_IDLE_RETURN seconds without
+#                  input (started once by the session)
+#
+# "game" and "shell" keep running until their program exits, then return to
+# "display". The current mode is in $XDG_RUNTIME_DIR/odimac-mode, which is how
+# odimac-powerd knows to keep the panel lit.
+. "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
+RUN="${ODIMAC_RUN:-${XDG_RUNTIME_DIR:-/tmp}}"
+state=$RUN/odimac-mode
+
+current() { cat "$state" 2>/dev/null || echo display; }
+switch_to() {
+  echo "$1" > "$state.new" && mv "$state.new" "$state"
+  swaymsg -q "workspace $1"
+}
+# Runs the mode's program unless it already is, and leaves the mode when it
+# exits (unless the user has switched elsewhere in the meantime).
+hold() { # mode, function
+  switch_to "$1"
+  exec 9> "$RUN/odimac-$1.lock"
+  flock -n 9 || exit 0
+  "$2"
+  [[ $(current) == "$1" ]] && switch_to display
+}
+
+run_game() {
+  local conf="${XDG_CONFIG_HOME:-$HOME/.config}/Moonlight Game Streaming Project/Moonlight.conf"
+  if [[ ! -e $conf ]]; then
+    # Moonlight's own default is 1080p.
+    mkdir -p "${conf%/*}"
+    printf '[General]\nwidth=%s\nheight=%s\nfps=%s\n' \
+      "${GAME_RESOLUTION%x*}" "${GAME_RESOLUTION#*x}" "$GAME_FPS" > "$conf"
+  fi
+  export QT_QPA_PLATFORM=wayland
+  if [[ -n $GAME_HOST ]]; then
+    local started=$SECONDS
+    echo "streaming \"$GAME_APP\" from $GAME_HOST at $GAME_RESOLUTION, $GAME_FPS fps" >&2
+    moonlight stream "$GAME_HOST" "$GAME_APP" --resolution "$GAME_RESOLUTION" \
+      --fps "$GAME_FPS" --display-mode fullscreen
+    # A stream that ended at once did not start (PC off, not paired yet):
+    # show Moonlight itself, which says why and can pair.
+    (( SECONDS - started >= GAME_MIN_SESSION )) && return
+    echo "the stream ended within ${GAME_MIN_SESSION}s, opening Moonlight" >&2
+  fi
+  moonlight
+}
+
+run_shell() { foot; }
+
+case ${1:-} in
+  display) switch_to display ;;
+  game)    hold game run_game ;;
+  shell)   hold shell run_shell ;;
+  status)  current ;;
+  watch)
+    (( MODE_IDLE_RETURN > 0 )) || exit 0
+    exec swayidle -w timeout "$MODE_IDLE_RETURN" "$0 display"
+    ;;
+  *) echo "usage: ${0##*/} display|game|shell|status|watch" >&2; exit 2 ;;
+esac

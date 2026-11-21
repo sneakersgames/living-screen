@@ -1,4 +1,5 @@
-# Optional wired Ethernet, for maintenance (ssh, pacman).
+# Optional wired Ethernet: maintenance (ssh, pacman) and the path to the
+# gaming PC.
 [Match]
 Name=en* eth*
 

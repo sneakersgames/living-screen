@@ -35,6 +35,7 @@ report() {
   else
     echo "kiosk session: NOT running (journalctl -b -u odimac-kiosk)"
   fi
+  echo "mode: $(cat /run/user/*/odimac-mode 2>/dev/null || echo display)  (Ctrl+Alt+1 display, +2 gaming, +3 terminal)"
   bl=$(ls /sys/class/backlight 2>/dev/null | tr '\n' ' ')
   echo "backlight control: ${bl:-none (BRIGHTNESS has no effect)}"
 
