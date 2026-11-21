@@ -343,15 +343,22 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
-- **The whole machine can stop** (picture stays, no key works, Caps Lock
-  does not light): seen in Moonlight's menu and after pulling the
-  Thunderbolt cable. The cause is not known yet. On the suspicion that the
-  Thunderbolt controller does not survive being powered down while idle, it
-  is now kept powered (`thunderbolt-awake`). After such a stop and a restart,
-  `odimac-doctor last-start` shows the last lines logged before it, and
-  `odimac-doctor` lists graphics card and kernel faults under "Trouble". If the graphics card hangs and the driver resets it, the display
-  session is restarted by itself (`odimac-gpu-reset.service`); an open
-  desktop is closed by that.
+- **Frozen picture, dead keyboard, on an installed iMac.** The log showed
+  the 5K graphics driver crashing (`dm_update_crtc_state`) at the moment the
+  text console first took the screen, which on a quiet system is the first
+  switch to the console (Ctrl+Alt+F2) or shutdown. The crash leaves the
+  display locked for good. New installations start with `fbcon=nodefer`,
+  which has the console take the screen at start instead, as it always did
+  on the live stick. An iMac installed before that gets it with
+
+  ```bash
+  sed -i '/^options/ s/$/ fbcon=nodefer/' /boot/loader/entries/odimac.conf
+  ```
+
+  and a restart. Whether this ends every freeze is not confirmed yet;
+  `odimac-doctor last-start` shows the last lines logged before a stop. The
+  Thunderbolt controller is also kept powered while idle
+  (`thunderbolt-awake`), on an earlier suspicion.
 - **No Wi-Fi and no Bluetooth set-up**, on the desktop either.
 - **Sound needs its own driver.** The 2017 iMac's audio chip (Cirrus
   CS8409 with a CS42L83) gets no sound out of the kernel's own driver. The

@@ -100,11 +100,16 @@ cat > "$MNT/boot/loader/loader.conf" <<'LOADER'
 default odimac.conf
 timeout 0
 LOADER
+# fbcon=nodefer: the text console takes the screen when the graphics driver
+# starts. Left to the default it waits for the first line of console output,
+# which on this quiet system comes late (a switch to the console, or
+# shutdown) and then crashes the 5K graphics driver, freezing the picture
+# and the keyboard.
 cat > "$MNT/boot/loader/entries/odimac.conf" <<ENTRY
 title   OpenDisplay iMac
 linux   /vmlinuz-linux
 initrd  /initramfs-linux.img
-options root=UUID=$root_uuid rw quiet loglevel=3 systemd.show_status=false rd.udev.log_level=3 vt.global_cursor_default=0
+options root=UUID=$root_uuid rw quiet loglevel=3 systemd.show_status=false rd.udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer
 ENTRY
 
 if [[ -n $ssh_key ]]; then
