@@ -1,0 +1,22 @@
+# The sound driver built by scripts/build-cs8409.sh, for one exact kernel:
+# speakers and headphone jack of the 2017 iMac (Cirrus CS8409 / CS42L83).
+# It goes into the kernel's updates/ directory, which takes precedence over
+# the stock module of the same name; that one finds no output on this board.
+# build-inner.sh provides krel (the kernel release) and the module.
+source ./krel
+pkgname=odimac-cs8409
+pkgver=${_krel//-/.}
+pkgrel=1
+pkgdesc="Sound driver for the iMac18,3 (CS8409), for linux ${_krel}"
+arch=('x86_64')
+url="https://github.com/jackdanyell/imac18-3-cs8409-linux-audio"
+license=('GPL-2.0-only')
+depends=("linux=${_pkgver}")
+source=(snd-hda-codec-cs8409.ko.zst)
+sha256sums=(SKIP)
+noextract=(snd-hda-codec-cs8409.ko.zst)
+options=('!strip')
+
+package() {
+  install -Dm644 snd-hda-codec-cs8409.ko.zst "$pkgdir/usr/lib/modules/${_krel}/updates/snd-hda-codec-cs8409.ko.zst"
+}

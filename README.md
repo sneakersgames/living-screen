@@ -34,7 +34,8 @@ Runs on a real iMac18,3 from the live stick.
 | Thunderbolt link to an Apple silicon MacBook, connecting by itself on plug-in | confirmed |
 | Mac display, H.264 at 4096x2304 | confirmed, about 45 frames per second |
 | Mac display, HEVC at native 5120x2880 | **not tested on the iMac** |
-| Gaming | **not tested on the iMac** |
+| Gaming, picture and input | confirmed with Apollo on the PC |
+| Sound (speakers, headphone jack) | **not tested on the iMac**: the driver is new in the image |
 | Desktop | **not tested on the iMac**; Hyprland has only parsed its config here, never drawn a frame |
 | Installer | **not tested on the iMac** |
 | Suspend | does not work, see "Known limits" |
@@ -52,7 +53,9 @@ Runs on a real iMac18,3 from the live stick.
 | `odimac-doctor` | Reports on panel, hardware decoding, Thunderbolt and the receiver; runs the suspend test and a decode benchmark |
 | `odimac-install` | Copies the live system onto the internal disk |
 
-Everything except the receiver is in the `odimac` package
+| `odimac-cs8409` | Sound driver for the iMac's audio chip, which the kernel's own driver cannot play through |
+
+Everything except the receiver and the two drivers is in the `odimac` package
 (`packages/odimac/`). There is no Wi-Fi. Wired Ethernet gets DHCP if you
 plug it in: it is the path to the gaming PC and the desktop's internet
 connection. A firewall (`odimac-firewall.service`)
@@ -77,6 +80,8 @@ This produces `out/odimac-<date>-x86_64.iso` and the `odimac` packages.
   driver are compiled once and kept in `out/cache` (as are downloaded
   packages); after that a build only reassembles the image. They are rebuilt
   when what they are made from changes. Delete `out/cache` to start over.
+- **The sound driver** is compiled the same way and cached; it takes a
+  minute.
 - **Other receiver source:** it is built from upstream tag `v1.30.3` plus
   the patches in `patches/opendisplay`; set `OPENDISPLAY_REPO` and
   `OPENDISPLAY_REF` for a fork or another tag, and `OPENDISPLAY_PATCHES=0`
@@ -315,11 +320,21 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
   times); and how the 2017 Radeon copes with Hyprland while the Mac's stream
   is decoded in the background.
 - **No Wi-Fi and no Bluetooth set-up**, on the desktop either.
-- **Gaming is untested on the iMac.** Open questions: whether the
-  internal speakers work (PipeWire is installed, but the 2017 iMac's audio
-  chip may need a driver the image does not have; USB audio should work), and
-  how fast the Radeon decodes Moonlight's stream. If the picture lags, choose
-  software decoding in Moonlight's settings.
+- **Sound from the speakers is untested.** The 2017 iMac's audio chip
+  (Cirrus CS8409 with a CS42L83) gets no sound out of the kernel's own
+  driver. The image adds the `odimac-cs8409` package: the driver from
+  [jackdanyell/imac18-3-cs8409-linux-audio](https://github.com/jackdanyell/imac18-3-cs8409-linux-audio),
+  built for the pinned kernel. It compiles; whether it plays is for the iMac
+  to say. `odimac-doctor` has a "Sound" section. USB speakers or a USB
+  headset work without it.
+- **Gaming: how fast the Radeon decodes Moonlight's stream is not
+  measured.** If the picture lags, choose software decoding in Moonlight's
+  settings.
+- **A soft or blocky picture for a moment, about once a minute,** on the Mac
+  display is the Mac's encoder starting a new key frame within its bit rate
+  (18 Mbit/s at "Best"). It is not a sign of an overloaded Mac or iMac. At
+  irregular moments it is a recovery after a lost frame instead: the
+  receiver's `stats` lines in the journal count those as `stalls`.
 - **Gaming does not wake the PC by itself.** Moonlight's menu on the
   PC's tile has "Wake PC" once the PC has been seen running.
 - The Mac only connects by itself when the cable appears. If the Mac sender

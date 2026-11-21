@@ -52,6 +52,23 @@ report() {
   done
   echo "(without vah264dec the receiver decodes on the CPU, which is too slow for 4K)"
 
+  h "Sound"
+  sed -n 's/^ *\([0-9]\+\) \[\([^ ]*\) *\].*/card \1: \2/p' /proc/asound/cards 2>/dev/null
+  for c in /proc/asound/card*/codec#*; do
+    [[ -r $c ]] && echo "  ${c#/proc/asound/}: $(sed -n 's/^Codec: //p' "$c")"
+  done
+  if modinfo -F filename snd-hda-codec-cs8409 2>/dev/null | grep -q /updates/; then
+    echo "iMac sound driver (speakers, headphone jack): installed$(lsmod | grep -q '^snd_hda_codec_cs8409' || echo ', NOT loaded')"
+  else
+    echo "iMac sound driver: NOT installed (no speakers; USB audio works)"
+  fi
+  if uid=$(id -u odimac 2>/dev/null) && [[ -S /run/user/$uid/pipewire-0 ]]; then
+    runuser -u odimac -- env XDG_RUNTIME_DIR="/run/user/$uid" wpctl status 2>&1 |
+      sed -n '/Sinks:/,/Sources:/p' | sed '$d' | cut -c1-100
+  else
+    echo "PipeWire: NOT running for the display session (as user odimac: systemctl --user status pipewire.socket)"
+  fi
+
   h "Thunderbolt"
   if [[ -d /sys/bus/thunderbolt/devices ]]; then
     for d in /sys/bus/thunderbolt/devices/*; do

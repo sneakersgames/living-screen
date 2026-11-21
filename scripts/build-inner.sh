@@ -73,17 +73,27 @@ chown -R builder "$WORK/odimac"
 extra_packages=()
 if [[ $KERNEL_PKGVER != current ]]; then
   krel=${KERNEL_PKGVER/.arch/-arch}
+  mkdir -p "$WORK/kernel"; chown builder "$WORK/kernel"
+  # The two drivers are built against the pinned kernel's headers; only
+  # needed when one of them is not in the cache.
+  have_headers=0
+  need_headers() {
+    (( have_headers )) && return
+    local archive=https://archive.archlinux.org/packages/l
+    # pacman verifies the packages' signatures before installing them.
+    pacman -U --noconfirm \
+      "$archive/linux/linux-$KERNEL_PKGVER-x86_64.pkg.tar.zst" \
+      "$archive/linux-headers/linux-headers-$KERNEL_PKGVER-x86_64.pkg.tar.zst"
+    have_headers=1
+  }
+
   echo "==> kernel $krel with the 5K panel driver"
   key=$(cat "$SRC/scripts/build-amdgpu5k.sh" "$SRC"/packages/odimac-amdgpu5k/* | sha256sum | cut -c1-12)
   k5_cache=$CACHE/amdgpu5k-$KERNEL_PKGVER-$key
   if compgen -G "$k5_cache/odimac-amdgpu5k-*.pkg.tar.zst" >/dev/null; then
     echo "    cached"
   else
-    archive=https://archive.archlinux.org/packages/l
-    # pacman verifies the packages' signatures before installing them.
-    pacman -U --noconfirm \
-      "$archive/linux/linux-$KERNEL_PKGVER-x86_64.pkg.tar.zst" \
-      "$archive/linux-headers/linux-headers-$KERNEL_PKGVER-x86_64.pkg.tar.zst"
+    need_headers
     cp -r "$SRC/packages/odimac-amdgpu5k" "$WORK/odimac-amdgpu5k"
     printf '_krel=%s\n_pkgver=%s\n' "$krel" "$KERNEL_PKGVER" > "$WORK/odimac-amdgpu5k/krel"
     mkdir -p "$WORK/kernel" "$WORK/k5-out"
@@ -96,6 +106,26 @@ if [[ $KERNEL_PKGVER != current ]]; then
   fi
   cp "$k5_cache"/*.pkg.tar.zst "$REPO/"
   extra_packages+=(odimac-amdgpu5k)
+
+  echo "==> sound driver (CS8409) for $krel"
+  key=$(cat "$SRC/scripts/build-cs8409.sh" "$SRC"/packages/odimac-cs8409/* | sha256sum | cut -c1-12)
+  cs_cache=$CACHE/cs8409-$KERNEL_PKGVER-$key
+  if compgen -G "$cs_cache/odimac-cs8409-*.pkg.tar.zst" >/dev/null; then
+    echo "    cached"
+  else
+    need_headers
+    cp -r "$SRC/packages/odimac-cs8409" "$WORK/odimac-cs8409"
+    printf '_krel=%s\n_pkgver=%s\n' "$krel" "$KERNEL_PKGVER" > "$WORK/odimac-cs8409/krel"
+    mkdir -p "$WORK/cs-out"
+    chown -R builder "$WORK/odimac-cs8409" "$WORK/cs-out"
+    as_builder "$SRC/scripts/build-cs8409.sh" "$krel" "$WORK/kernel" "$WORK/odimac-cs8409/snd-hda-codec-cs8409.ko.zst"
+    (cd "$WORK/odimac-cs8409" && sudo -u builder env PKGDEST="$WORK/cs-out" makepkg --force --nodeps)
+    mkdir -p "$cs_cache.tmp"
+    cp "$WORK"/cs-out/*.pkg.tar.zst "$cs_cache.tmp/"
+    mv "$cs_cache.tmp" "$cs_cache"
+  fi
+  cp "$cs_cache"/*.pkg.tar.zst "$REPO/"
+  extra_packages+=(odimac-cs8409)
 fi
 
 repo-add -q "$REPO/odimac.db.tar.gz" "$REPO"/*.pkg.tar.zst
