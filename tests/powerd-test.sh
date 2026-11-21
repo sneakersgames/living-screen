@@ -4,7 +4,7 @@
 set -u
 here=$(cd "$(dirname "$0")/.." && pwd)
 t=$(mktemp -d); trap 'kill "$pid" 2>/dev/null; rm -rf "$t"' EXIT
-mkdir -p "$t/bin" "$t/lib" "$t/sys/class/net/lo"
+mkdir -p "$t/bin" "$t/lib" "$t/run" "$t/sys/class/net/lo"
 cp "$here/packages/odimac/common.sh" "$t/lib/"
 printf 'PANEL_OFF_DELAY=3\nSUSPEND_AFTER=6\n' > "$t/conf"
 cat > "$t/bin/swaymsg" <<S
@@ -23,7 +23,7 @@ S
 chmod +x "$t/bin/"*
 : > "$t/panel.log"; : > "$t/systemctl.log"
 
-PATH="$t/bin:$PATH" ODIMAC_CONF="$t/conf" ODIMAC_LIB="$t/lib" ODIMAC_SYSFS="$t/sys" \
+PATH="$t/bin:$PATH" ODIMAC_CONF="$t/conf" ODIMAC_LIB="$t/lib" ODIMAC_SYSFS="$t/sys" ODIMAC_RUN="$t/run" \
   ODIMAC_POLL=0.2 ODIMAC_LOAD_INTERVAL=2 "$here/packages/odimac/powerd" 2> "$t/powerd.log" &
 pid=$!
 
@@ -44,6 +44,12 @@ else echo "FAIL no load line during the session"; fail=1; fi
 rm "$t/session"
 sleep 1.5; expect "still lit just after the session ends" on
 sleep 3;   expect "dark after the session ended" off
+echo game > "$t/run/odimac-mode"
+sleep 1;   expect "lit in gaming mode" on
+sleep 3.5; expect "stays lit in gaming mode, past the idle delay" on
+echo display > "$t/run/odimac-mode"
+sleep 1.5; expect "still lit just after returning to display mode" on
+sleep 3;   expect "dark once display mode is idle again" off
 sleep 4
 if [[ -s $t/systemctl.log ]]; then echo "FAIL suspended with the cable plugged in"; fail=1
 else echo "ok   no suspend while the cable is plugged in"; fi

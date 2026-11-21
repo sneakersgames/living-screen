@@ -6,7 +6,10 @@ args=(--name "$RECEIVER_NAME" --device "$RECEIVER_DEVICE" --listen "0.0.0.0:$REC
 read -ra extra <<<"$RECEIVER_EXTRA_ARGS"
 # Ends with the compositor, so a restarted session starts clean.
 while [[ -S ${SWAYSOCK:-} ]]; do
-  od-receiver "${args[@]}" "${extra[@]}"
+  od-receiver "${args[@]}" "${extra[@]}" &
+  # Its window belongs on the "display" workspace whichever mode is showing.
+  swaymsg -q "for_window [pid=$!] move container to workspace display"
+  wait $!
   echo "od-receiver exited ($?), restarting" >&2
   sleep 2
 done

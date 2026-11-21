@@ -7,6 +7,10 @@ MacBook, using [OpenDisplay](https://github.com/peetzweg/opendisplay).
 - Plug a Thunderbolt cable into the MacBook: the panel lights up and the Mac
   extends onto it on its own.
 - Unplug, or let the Mac sleep: the panel goes dark a minute later.
+- Press **Ctrl+Alt+2** on a keyboard attached to the iMac: it becomes the
+  screen of a gaming PC instead, through
+  [Moonlight](https://moonlight-stream.org). **Ctrl+Alt+1** returns to the
+  Mac. See "Gaming mode" below; this part has not run on a real iMac yet.
 
 The same image is the live USB stick (for testing, nothing is written to the
 iMac) and the installer.
@@ -23,14 +27,15 @@ plugged in. Not yet confirmed: the installer on real hardware.
 |---|---|
 | `opendisplay-receiver` | Upstream's Linux receiver, built from a release tag |
 | `odimac-kiosk.service` | Starts `sway` on tty1 as user `odimac`, at scale 2, with nothing but the receiver in it |
-| `odimac-powerd` | Lights the panel while a sender is connected or a cable was just plugged in, darkens it otherwise, optionally suspends |
+| `mode` | Switches between the three sway workspaces: `display` (the receiver), `game` (Moonlight) and `shell` (a terminal) |
+| `odimac-powerd` | Lights the panel while a sender is connected, a cable was just plugged in, or the gaming or terminal mode is showing; darkens it otherwise, optionally suspends |
 | `10-odimac-thunderbolt.network` | Link-local addresses on the Thunderbolt link, which is how the Mac recognises a direct cable |
 | `odimac-doctor` | Reports on panel, hardware decoding, Thunderbolt and the receiver; runs the suspend test and a decode benchmark |
 | `odimac-install` | Copies the live system onto the internal disk |
 
 Everything except the receiver is in the `odimac` package
 (`packages/odimac/`). There is no Wi-Fi. Wired Ethernet gets DHCP if you
-plug it in, for maintenance only: a firewall (`odimac-firewall.service`)
+plug it in, for maintenance and as the path to the gaming PC: a firewall (`odimac-firewall.service`)
 makes the receiver reachable and visible over the Thunderbolt cable alone, so
 a session can never end up on Wi-Fi by way of the iMac's Ethernet port.
 `systemctl disable --now odimac-firewall` lifts that.
@@ -108,6 +113,46 @@ idle state.
    odimac-doctor suspend-test
    ```
 
+## Gaming mode
+
+The iMac can also be the only screen of a Windows PC, for games: the PC
+streams its picture over the wired network and the iMac shows it with
+Moonlight. Keyboard, mouse and controllers plugged into the iMac are passed
+on to the PC.
+
+| Keys | Mode |
+|---|---|
+| **Ctrl+Alt+1** | The Mac's display (the default) |
+| **Ctrl+Alt+2** | Gaming: Moonlight, started on first use |
+| **Ctrl+Alt+3** | A terminal on the iMac (user `odimac`); `exit` closes it |
+
+The keys also work during a game. Both modes return to the Mac's display
+when their program quits, or after ten minutes without input
+(`MODE_IDLE_RETURN`; a running stream does not count as idle). The Mac's
+session carries on in the background while another mode is showing.
+
+Set-up, once:
+
+1. On the PC, install [Apollo](https://github.com/ClassicOldSong/Apollo)
+   (Sunshine with a built-in virtual display, so the PC needs no monitor of
+   its own afterwards) or [Sunshine](https://github.com/LizardByte/Sunshine)
+   with an HDMI dummy plug. This step needs a screen on the PC.
+2. Connect the iMac's Ethernet port to the same network as the PC.
+3. Press Ctrl+Alt+2. In Moonlight choose "Add PC manually" and enter the
+   PC's address: Moonlight cannot find the PC by itself, because the firewall
+   blocks the discovery protocol that would also show the receiver to Macs on
+   the network. Moonlight shows a PIN; enter it in Apollo's web page
+   (`https://<PC address>:47990`, from any browser).
+4. Optional, on an installed system: set `GAME_HOST` in
+   `/etc/odimac/odimac.conf` to the PC's address. Ctrl+Alt+2 then goes
+   straight into the stream.
+
+Moonlight starts out at 2560x1440 and 60 frames per second, which is exactly
+half the panel in each direction. Its settings and the pairing are kept in
+`/var/lib/odimac`, so from the live stick they are lost at power-off.
+During a stream, Ctrl+Alt+Shift+S shows Moonlight's statistics and
+Ctrl+Alt+Shift+Q ends the stream.
+
 ## Install
 
 Running from the stick works indefinitely; streaming is no faster from the
@@ -148,6 +193,10 @@ An iMac with a Fusion Drive shows two disks; install onto the SSD.
 | `RECEIVER_DECODER` | `avdec_h264` | Video decoder; see the comment in the file |
 | `RECEIVER_HEVC` | `1` | Offer HEVC, for a native 5K stream; `0` for H.264 at 4096x2304 |
 | `RECEIVER_EXTRA_ARGS` | empty | Passed to `od-receiver` |
+| `GAME_HOST` | empty | The gaming PC's address; empty opens Moonlight's own interface |
+| `GAME_APP` | `Desktop` | What to stream with `GAME_HOST` set |
+| `GAME_RESOLUTION`, `GAME_FPS` | `2560x1440`, `60` | Stream size and rate |
+| `MODE_IDLE_RETURN` | `600` | Seconds without input before the gaming and terminal modes return to the Mac's display; `0` never |
 
 Compositor overrides, such as another scale, go in
 `/etc/odimac/sway.d/*.conf`.
@@ -192,6 +241,13 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
+- **Gaming mode is untested on the iMac.** Open questions: whether the
+  internal speakers work (PipeWire is installed, but the 2017 iMac's audio
+  chip may need a driver the image does not have; USB audio should work), and
+  how fast the Radeon decodes Moonlight's stream. If the picture lags, choose
+  software decoding in Moonlight's settings.
+- **Gaming mode does not wake the PC by itself.** Moonlight's menu on the
+  PC's tile has "Wake PC" once the PC has been seen running.
 - The Mac only connects by itself when the cable appears. If the Mac sender
   is started with the cable already in, pick the iMac from its menu once.
 
@@ -224,5 +280,13 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 tests/powerd-test.sh
 ```
 
-runs the panel and suspend policy against a fake sysfs. To update an
+runs the panel and suspend policy against a fake sysfs.
+
+```bash
+tests/mode-test.sh
+```
+
+runs the sway config and the mode switching in a headless sway, with
+terminals standing in for Moonlight and the receiver (needs `sway`, `foot`
+and `jq`; skips itself without them). To update an
 installed iMac, copy `out/odimac-*.pkg.tar.zst` over and `pacman -U` it.

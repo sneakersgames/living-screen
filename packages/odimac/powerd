@@ -2,16 +2,20 @@
 # Panel and suspend policy for the kiosk session. Runs inside sway.
 #
 #   panel on   while a sender is connected, and for PANEL_OFF_DELAY seconds
-#              after boot, resume, a cable plug-in or the end of a session
+#              after boot, resume, a cable plug-in or the end of a session;
+#              and for as long as the gaming or terminal mode is showing
 #   panel off  otherwise (output power off: backlight dark, machine idle)
-#   suspend    optional, only with no cable and no session (SUSPEND_AFTER)
+#   suspend    optional, only with no cable, no session and the display
+#              mode showing (SUSPEND_AFTER)
 #
 # "Cable" is a thunderbolt-net interface: the kernel creates one when the
 # far end of the Thunderbolt cable is a computer. "Session" is an established
-# TCP connection to the receiver's port.
+# TCP connection to the receiver's port. The mode is what
+# /usr/lib/odimac/mode last switched to.
 . "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
 SYSFS="${ODIMAC_SYSFS:-/sys}"
 POLL="${ODIMAC_POLL:-1}"
+MODE_FILE="${ODIMAC_RUN:-${XDG_RUNTIME_DIR:-/tmp}}/odimac-mode"
 
 log() { echo "$*" >&2; }
 
@@ -28,6 +32,8 @@ cable_present() {
 session_active() {
   [[ -n $(ss -Htn state established "( sport = :$RECEIVER_PORT )" 2>/dev/null) ]]
 }
+
+current_mode() { cat "$MODE_FILE" 2>/dev/null || echo display; }
 
 panel=unknown
 set_panel() {
@@ -55,6 +61,7 @@ lit_until=$((now + PANEL_OFF_DELAY))
 alone_since=$now
 had_cable=0
 had_session=0
+had_mode=display
 load_logged=0
 LOAD_LOG_INTERVAL=${ODIMAC_LOAD_INTERVAL:-60}
 log "started (panel off after ${PANEL_OFF_DELAY}s idle, suspend after ${SUSPEND_AFTER}s)"
@@ -84,8 +91,15 @@ while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
   fi
   (( session && !had_session )) && log "sender connected"
   (( !session && had_session )) && log "sender disconnected"
+  mode=$(current_mode)
+  if [[ $mode != "$had_mode" ]]; then
+    log "mode $mode"
+    # Back on the Mac's display: wait for a sender as after a session.
+    [[ $mode == display ]] && lit_until=$((now + PANEL_OFF_DELAY))
+  fi
   had_cable=$cable
   had_session=$session
+  had_mode=$mode
 
   # During a session, note the machine's load in the journal once a minute.
   if (( session )); then
@@ -101,7 +115,9 @@ while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
     load_logged=0
   fi
 
-  if (( session )); then
+  if [[ $mode != display ]]; then
+    set_panel on "$mode mode"
+  elif (( session )); then
     set_panel on "sender connected"
   elif (( now < lit_until )); then
     set_panel on "waiting for a sender"
@@ -109,7 +125,7 @@ while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
     set_panel off "idle"
   fi
 
-  if (( cable || session )); then
+  if (( cable || session )) || [[ $mode != display ]]; then
     alone_since=$now
   elif (( SUSPEND_AFTER > 0 && now - alone_since >= SUSPEND_AFTER )); then
     log "no cable for ${SUSPEND_AFTER}s, suspending"

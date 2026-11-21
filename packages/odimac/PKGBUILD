@@ -2,20 +2,22 @@
 pkgname=odimac
 pkgver=0.4.0
 pkgrel=1
-pkgdesc="Turns an Intel iMac into a single-purpose OpenDisplay screen"
+pkgdesc="Turns an Intel iMac into an OpenDisplay screen that can also stream games from a PC"
 arch=('any')
 url="https://github.com/peetzweg/opendisplay"
 license=('GPL-3.0-only')
 depends=(
   'opendisplay-receiver'
-  'sway' 'swaybg' 'polkit' 'nftables'
+  'sway' 'swaybg' 'swayidle' 'polkit' 'nftables'
+  'moonlight-qt' 'qt6-wayland' 'foot' 'ttf-dejavu'   # gaming and terminal modes
+  'pipewire' 'pipewire-pulse' 'wireplumber'          # Moonlight's audio
   'mesa' 'gst-plugin-va' 'libva-utils' 'gstreamer' 'ffmpeg'
   'brightnessctl' 'iproute2' 'util-linux' 'systemd'
   'dosfstools' 'e2fsprogs' 'arch-install-scripts'   # odimac-install
 )
 backup=('etc/odimac/odimac.conf')
 install=odimac.install
-_files=(odimac.conf common.sh receiver-loop powerd wake-sources sleep-hook
+_files=(odimac.conf common.sh receiver-loop powerd mode wake-sources sleep-hook
   sway.conf odimac-kiosk.service pam-odimac-kiosk sysusers.conf tmpfiles.conf
   polkit.rules 10-odimac-thunderbolt.network 15-odimac-ethernet.network
   modules-load.conf mkinitcpio.conf logind.conf firewall.nft odimac-firewall.service odimac-doctor odimac-install)
@@ -25,7 +27,7 @@ sha256sums=($(printf 'SKIP %.0s' "${_files[@]}"))
 package() {
   install -Dm644 odimac.conf "$pkgdir/etc/odimac/odimac.conf"
   install -Dm644 common.sh "$pkgdir/usr/lib/odimac/common.sh"
-  install -Dm755 receiver-loop powerd wake-sources -t "$pkgdir/usr/lib/odimac"
+  install -Dm755 receiver-loop powerd mode wake-sources -t "$pkgdir/usr/lib/odimac"
   install -Dm755 sleep-hook "$pkgdir/usr/lib/systemd/system-sleep/odimac-wake"
   install -Dm644 sway.conf "$pkgdir/usr/share/odimac/sway.conf"
   install -Dm644 odimac-kiosk.service odimac-firewall.service -t "$pkgdir/usr/lib/systemd/system"
