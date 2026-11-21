@@ -1,0 +1,490 @@
+From 4971dd3dbaf214ee61c03005287126253a4a350a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 21 Nov 2026 10:55:16 +0000
+Subject: [PATCH] linux receiver: decode HEVC and offer it in hello.videoCaps
+
+The receiver took every stream for H.264, so senders capped it at the
+H.264 ceiling (4096x2304). Take the codec from streamConfig (PROTOCOL.md
+6.5), parse HEVC access units, build the pipeline with h265parse and an
+HEVC decoder, and offer HEVC up to the panel size when one is installed.
+--no-hevc turns the offer off.
+---
+ linux/crates/od-receiver/src/gtk_ui.rs        |  5 ++
+ linux/crates/od-receiver/src/lib.rs           |  9 ++
+ linux/crates/od-receiver/src/main.rs          | 35 ++++++--
+ linux/crates/od-receiver/src/video.rs         | 90 +++++++++++++++++--
+ linux/crates/opendisplay-proto/src/video.rs   | 77 ++++++++++++++--
+ .../opendisplay-session/src/receiver.rs       | 31 ++++++-
+ 6 files changed, 224 insertions(+), 23 deletions(-)
+
+diff --git a/linux/crates/od-receiver/src/gtk_ui.rs b/linux/crates/od-receiver/src/gtk_ui.rs
+index 90fc156..002d767 100644
+--- a/linux/crates/od-receiver/src/gtk_ui.rs
++++ b/linux/crates/od-receiver/src/gtk_ui.rs
+@@ -154,6 +154,11 @@ impl VideoOutput for GtkVideo {
+     fn reset(&mut self) -> Result<()> {
+         self.inner.reset()
+     }
++    fn set_codec(&mut self, codec: crate::video::Codec) -> Result<()> {
++        let r = self.inner.set_codec(codec);
++        self.follow_pipeline();
++        r
++    }
+     fn poll_error(&mut self) -> Option<String> {
+         let e = self.inner.poll_error();
+         self.follow_pipeline();
+diff --git a/linux/crates/od-receiver/src/lib.rs b/linux/crates/od-receiver/src/lib.rs
+index db10e17..bfff8f7 100644
+--- a/linux/crates/od-receiver/src/lib.rs
++++ b/linux/crates/od-receiver/src/lib.rs
+@@ -352,6 +352,11 @@ impl Receiver {
+                                 s.width, s.height, s.profile_idc, s.level_idc
+                             );
+                         }
++                        // No-op unless the codec changed (a new connection
++                        // starts over with H.264).
++                        if let Err(e) = self.video.set_codec(sess.codec()) {
++                            warn!("cannot decode {}: {e:#}", sess.codec().token());
++                        }
+                         if let Err(e) = self.video.push(&v.annexb, v.is_idr) {
+                             warn!("decoder push failed: {e:#}");
+                             report.decode_errors += 1;
+@@ -387,6 +392,10 @@ impl Receiver {
+                             "streamConfig {} {}x{} @{}",
+                             s.codec, s.width, s.height, s.frames_per_second
+                         );
++                        // Have the right decoder up before the first frame.
++                        if let Err(e) = self.video.set_codec(sess.codec()) {
++                            warn!("cannot decode {}: {e:#}", sess.codec().token());
++                        }
+                     }
+                     ReceiverAction::SenderHealth(p) => debug!("sender health {p:?}"),
+                     ReceiverAction::Close(reason) => {
+diff --git a/linux/crates/od-receiver/src/main.rs b/linux/crates/od-receiver/src/main.rs
+index aec02dd..0681301 100644
+--- a/linux/crates/od-receiver/src/main.rs
++++ b/linux/crates/od-receiver/src/main.rs
+@@ -46,6 +46,11 @@ struct Args {
+     /// GStreamer decoder element (decodebin3 autoplugs by rank).
+     #[arg(long, default_value = "decodebin3")]
+     decoder: String,
++    /// Do not offer HEVC to the sender (§6.5). By default it is offered when
++    /// this machine has an HEVC decoder; a sender that can encode it then
++    /// streams up to the panel's full size instead of the H.264 ceiling.
++    #[arg(long)]
++    no_hevc: bool,
+     /// Present in a normal window instead of fullscreen.
+     #[arg(long)]
+     windowed: bool,
+@@ -120,13 +125,29 @@ fn hello(a: &Args, guess: PanelGuess, install_id: &str) -> Result<Hello> {
+         }),
+         // §6.5: H.264 always; no measured decode ceiling yet, so only the
+         // panel's rate bounds it.
+-        video_caps: Some(vec![VideoCap {
+-            codec: "h264".into(),
+-            max_width: None,
+-            max_height: None,
+-            max_frame_rate: refresh,
+-            max_pixels_per_second: None,
+-        }]),
++        video_caps: Some({
++            let mut caps = vec![VideoCap {
++                codec: "h264".into(),
++                max_width: None,
++                max_height: None,
++                max_frame_rate: refresh,
++                max_pixels_per_second: None,
++            }];
++            // HEVC up to the panel, when this machine can decode it.
++            if !a.no_hevc
++                && a.sink != SinkKind::None
++                && od_receiver::video::hevc_supported(&a.decoder)
++            {
++                caps.push(VideoCap {
++                    codec: "hevc".into(),
++                    max_width: Some(width),
++                    max_height: Some(height),
++                    max_frame_rate: refresh,
++                    max_pixels_per_second: None,
++                });
++            }
++            caps
++        }),
+         ..Default::default()
+     })
+ }
+diff --git a/linux/crates/od-receiver/src/video.rs b/linux/crates/od-receiver/src/video.rs
+index ddfa368..c496ae8 100644
+--- a/linux/crates/od-receiver/src/video.rs
++++ b/linux/crates/od-receiver/src/video.rs
+@@ -5,6 +5,7 @@
+ //! (`avdec_h264`), and presents through `waylandsink` zero-copy when it can.
+ 
+ use anyhow::Result;
++pub use opendisplay_proto::video::Codec;
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub enum SinkKind {
+@@ -83,6 +84,11 @@ pub trait VideoOutput: Send {
+     fn push(&mut self, annexb: &[u8], is_idr: bool) -> Result<()>;
+     /// Parameter sets changed or a new sender connected: drop everything buffered.
+     fn reset(&mut self) -> Result<()>;
++    /// The frames that follow are of this codec (`streamConfig`, §6.5).
++    /// Called often; a backend only acts when the codec changes.
++    fn set_codec(&mut self, _codec: Codec) -> Result<()> {
++        Ok(())
++    }
+     /// Non-blocking: has the pipeline reported an error since the last call?
+     /// Implementations recover internally; the caller requests a keyframe.
+     fn poll_error(&mut self) -> Option<String>;
+@@ -125,6 +131,18 @@ impl VideoOutput for NullOutput {
+     }
+ }
+ 
++/// Whether this machine can decode an HEVC stream with `decoder` (the
++/// `--decoder` value), so `hello.videoCaps` may offer it (§6.5).
++pub fn hevc_supported(decoder: &str) -> bool {
++    #[cfg(feature = "gstreamer")]
++    return gst_out::hevc_supported(decoder);
++    #[cfg(not(feature = "gstreamer"))]
++    {
++        let _ = decoder;
++        false
++    }
++}
++
+ pub fn open(cfg: &VideoConfig) -> Result<Box<dyn VideoOutput>> {
+     match cfg.sink {
+         SinkKind::None => Ok(Box::new(NullOutput::default())),
+@@ -148,6 +166,7 @@ pub mod gst_out {
+ 
+     pub struct GstOutput {
+         cfg: VideoConfig,
++        codec: Codec,
+         desc: String,
+         pipeline: gst::Pipeline,
+         appsrc: gst_app::AppSrc,
+@@ -177,7 +196,39 @@ pub mod gst_out {
+         frozen_rebuilds: u32,
+     }
+ 
+-    fn launch_description(cfg: &VideoConfig) -> String {
++    /// The decoder element for `codec`. `--decoder` names an H.264 decoder;
++    /// for HEVC its sibling is used (avdec_h264 -> avdec_h265, vah264dec ->
++    /// vah265dec), and decodebin3 picks one where there is none.
++    fn decoder_for(cfg: &VideoConfig, codec: Codec) -> String {
++        if codec == Codec::H264 || cfg.decoder == "decodebin3" {
++            return cfg.decoder.clone();
++        }
++        let sibling = cfg.decoder.replace("h264", "h265");
++        if sibling != cfg.decoder && gst::ElementFactory::find(&sibling).is_some() {
++            sibling
++        } else {
++            "decodebin3".into()
++        }
++    }
++
++    const TRUSTED_H265: &[&str] = &["avdec_h265", "vah265dec", "nvh265dec", "v4l2h265dec"];
++
++    pub fn hevc_supported(decoder: &str) -> bool {
++        if gst::init().is_err() || gst::ElementFactory::find("h265parse").is_none() {
++            return false;
++        }
++        let sibling = decoder.replace("h264", "h265");
++        if decoder != "decodebin3" && sibling != decoder {
++            if gst::ElementFactory::find(&sibling).is_some() {
++                return true;
++            }
++        }
++        TRUSTED_H265
++            .iter()
++            .any(|n| gst::ElementFactory::find(n).is_some_and(|f| f.rank() > gst::Rank::NONE))
++    }
++
++    fn launch_description(cfg: &VideoConfig, codec: Codec) -> String {
+         let sink = match cfg.sink {
+             SinkKind::Wayland => {
+                 let mut s = String::from("waylandsink sync=false");
+@@ -218,13 +269,17 @@ pub mod gst_out {
+         } else {
+             ""
+         };
++        let (caps, parser) = match codec {
++            Codec::H264 => ("video/x-h264", "h264parse"),
++            Codec::Hevc => ("video/x-h265", "h265parse"),
++        };
+         format!(
+             "appsrc name=src is-live=true format=time do-timestamp=true block=false max-bytes=0 \
+-             caps=video/x-h264,stream-format=byte-stream,alignment=au \
+-             ! h264parse ! {decoder} \
++             caps={caps},stream-format=byte-stream,alignment=au \
++             ! {parser} ! {decoder} \
+              ! queue name=present max-size-buffers=1 max-size-bytes=0 max-size-time=0 leaky=downstream \
+              {convert}! identity name=rendered silent=true ! {sink}",
+-            decoder = cfg.decoder,
++            decoder = decoder_for(cfg, codec),
+         )
+     }
+ 
+@@ -260,9 +315,11 @@ pub mod gst_out {
+             }
+             let rendered = Arc::new(AtomicU64::new(0));
+             let decode_ms = Arc::new(std::sync::Mutex::new(Vec::new()));
+-            let (desc, pipeline, appsrc, paintable_sink) = Self::build(cfg, &rendered, &decode_ms)?;
++            let (desc, pipeline, appsrc, paintable_sink) =
++                Self::build(cfg, Codec::H264, &rendered, &decode_ms)?;
+             Ok(Self {
+                 cfg: cfg.clone(),
++                codec: Codec::H264,
+                 desc,
+                 pipeline,
+                 appsrc,
+@@ -289,10 +346,11 @@ pub mod gst_out {
+         /// A fresh pipeline for `cfg`, counting rendered frames into `rendered`.
+         fn build(
+             cfg: &VideoConfig,
++            codec: Codec,
+             rendered: &Arc<AtomicU64>,
+             decode_ms: &Arc<std::sync::Mutex<Vec<f64>>>,
+         ) -> Result<(String, gst::Pipeline, gst_app::AppSrc, Option<gst::Element>)> {
+-            let desc = launch_description(cfg);
++            let desc = launch_description(cfg, codec);
+             let pipeline = gst::parse::launch(&desc)
+                 .with_context(|| format!("building pipeline: {desc}"))?
+                 .downcast::<gst::Pipeline>()
+@@ -371,7 +429,7 @@ pub mod gst_out {
+         fn recreate(&mut self) -> Result<()> {
+             let _ = self.pipeline.set_state(gst::State::Null);
+             let (desc, pipeline, appsrc, paintable_sink) =
+-                Self::build(&self.cfg, &self.rendered, &self.decode_ms)?;
++                Self::build(&self.cfg, self.codec, &self.rendered, &self.decode_ms)?;
+             self.desc = desc;
+             self.pipeline = pipeline;
+             self.appsrc = appsrc;
+@@ -615,6 +673,24 @@ pub mod gst_out {
+             Ok(())
+         }
+ 
++        fn set_codec(&mut self, codec: Codec) -> Result<()> {
++            if codec == self.codec {
++                return Ok(());
++            }
++            if codec == Codec::Hevc && gst::ElementFactory::find("h265parse").is_none() {
++                return Err(anyhow!(
++                    "GStreamer element `h265parse` missing (install gst-plugins-bad)"
++                ));
++            }
++            info!("stream codec is now {}", codec.token());
++            self.codec = codec;
++            // A different parser and decoder: only a new pipeline has them.
++            self.recreate()?;
++            self.stall_after = self.pushed + 15;
++            self.warned_stall = false;
++            Ok(())
++        }
++
+         fn poll_error(&mut self) -> Option<String> {
+             // Also on the tick: a static desktop sends few frames, so the
+             // "nothing within a second of the IDR" rule must not wait for one.
+diff --git a/linux/crates/opendisplay-proto/src/video.rs b/linux/crates/opendisplay-proto/src/video.rs
+index 0ae036c..5b06aae 100644
+--- a/linux/crates/opendisplay-proto/src/video.rs
++++ b/linux/crates/opendisplay-proto/src/video.rs
+@@ -74,6 +74,49 @@ impl NalType {
+     }
+ }
+ 
++/// The codec of a video stream (§5): H.264 unless `streamConfig` says otherwise.
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
++pub enum Codec {
++    #[default]
++    H264,
++    Hevc,
++}
++
++impl Codec {
++    /// The `streamConfig.codec` / `videoCaps.codec` token (§6.5).
++    pub fn from_token(token: &str) -> Option<Codec> {
++        match token {
++            "h264" => Some(Codec::H264),
++            "hevc" => Some(Codec::Hevc),
++            _ => None,
++        }
++    }
++
++    pub fn token(self) -> &'static str {
++        match self {
++            Codec::H264 => "h264",
++            Codec::Hevc => "hevc",
++        }
++    }
++}
++
++/// HEVC NAL unit types this protocol cares about (`nal_unit_type`: six bits
++/// of the first header byte, after the forbidden zero bit).
++pub mod hevc {
++    pub const VPS: u8 = 32;
++    pub const SPS: u8 = 33;
++    pub const PPS: u8 = 34;
++
++    pub fn nal_type(nal: &[u8]) -> Option<u8> {
++        Some((*nal.first()? >> 1) & 0x3f)
++    }
++
++    /// A random access picture (BLA, IDR, CRA): decoding can start here.
++    pub fn is_random_access(nal_type: u8) -> bool {
++        (16..=21).contains(&nal_type)
++    }
++}
++
+ /// Find the first 4-byte start code at or after `from`.
+ fn find_start_code(buf: &[u8], from: usize) -> Option<usize> {
+     if buf.len() < 4 {
+@@ -105,21 +148,38 @@ pub struct VideoFrame<'a> {
+     pub annexb: &'a [u8],
+     pub sps: Option<&'a [u8]>,
+     pub pps: Option<&'a [u8]>,
++    /// A keyframe: an H.264 IDR picture or an HEVC random access picture.
+     pub is_idr: bool,
++    pub codec: Codec,
+ }
+ 
+ impl<'a> VideoFrame<'a> {
++    /// Parse a frame of the legacy H.264 stream.
+     pub fn parse(payload: &'a [u8]) -> Result<VideoFrame<'a>, VideoFrameError> {
++        Self::parse_as(payload, Codec::H264)
++    }
++
++    /// Parse a frame of the codec `streamConfig` announced (§6.5: the codec
++    /// comes from `streamConfig`, never from the bitstream).
++    pub fn parse_as(payload: &'a [u8], codec: Codec) -> Result<VideoFrame<'a>, VideoFrameError> {
+         let first = find_start_code(payload, 0).ok_or(VideoFrameError::NoStartCode)?;
+         let telemetry = Telemetry::parse_lenient(&payload[..first]);
+         let annexb = &payload[first..];
+         let (mut sps, mut pps, mut is_idr) = (None, None, false);
+         for nal in nal_units(annexb) {
+-            match NalType::of(nal) {
+-                Some(NalType::Sps) => sps = Some(nal),
+-                Some(NalType::Pps) => pps = Some(nal),
+-                Some(NalType::IdrSlice) => is_idr = true,
+-                _ => {}
++            match codec {
++                Codec::H264 => match NalType::of(nal) {
++                    Some(NalType::Sps) => sps = Some(nal),
++                    Some(NalType::Pps) => pps = Some(nal),
++                    Some(NalType::IdrSlice) => is_idr = true,
++                    _ => {}
++                },
++                Codec::Hevc => match hevc::nal_type(nal) {
++                    Some(hevc::SPS) => sps = Some(nal),
++                    Some(hevc::PPS) => pps = Some(nal),
++                    Some(t) if hevc::is_random_access(t) => is_idr = true,
++                    _ => {}
++                },
+             }
+         }
+         Ok(VideoFrame {
+@@ -128,13 +188,18 @@ impl<'a> VideoFrame<'a> {
+             sps,
+             pps,
+             is_idr,
++            codec,
+         })
+     }
+ 
+     /// Video dimensions from the SPS, if this frame carries one (§5.2:
+     /// receivers MUST take dimensions from the SPS, never from `hello`).
++    /// Only H.264 SPS are parsed; an HEVC frame reports none.
+     pub fn sps_info(&self) -> Option<Result<SpsInfo, VideoFrameError>> {
+-        self.sps.map(SpsInfo::parse)
++        match self.codec {
++            Codec::H264 => self.sps.map(SpsInfo::parse),
++            Codec::Hevc => None,
++        }
+     }
+ }
+ 
+diff --git a/linux/crates/opendisplay-session/src/receiver.rs b/linux/crates/opendisplay-session/src/receiver.rs
+index b7d8362..fd0cde6 100644
+--- a/linux/crates/opendisplay-session/src/receiver.rs
++++ b/linux/crates/opendisplay-session/src/receiver.rs
+@@ -6,7 +6,9 @@ use std::time::Duration;
+ use opendisplay_proto::control::{
+     ControlMessage, CursorImg, Hello, Ping, StreamConfig, UpdateRequired, Welcome,
+ };
+-use opendisplay_proto::video::{ParameterSetChange, ParameterSetTracker, SpsInfo, VideoFrame};
++use opendisplay_proto::video::{
++    Codec, ParameterSetChange, ParameterSetTracker, SpsInfo, VideoFrame,
++};
+ use opendisplay_proto::{Channel, Deframer, classify, encode_frame, version};
+ 
+ use crate::clock::ClockSync;
+@@ -120,6 +122,8 @@ pub struct ReceiverSession {
+     connected: bool,
+     deframer: Deframer,
+     params: ParameterSetTracker,
++    /// The stream's codec: H.264 until `streamConfig` selects another (§6.5).
++    codec: Codec,
+     clock: ClockSync,
+     cursor_seq: CursorSeqTracker,
+     udp_flow: Option<u64>,
+@@ -141,6 +145,7 @@ impl ReceiverSession {
+             connected: false,
+             deframer: Deframer::for_receiver(),
+             params: ParameterSetTracker::default(),
++            codec: Codec::H264,
+             clock: ClockSync::default(),
+             cursor_seq: CursorSeqTracker::default(),
+             udp_flow: None,
+@@ -222,10 +227,16 @@ impl ReceiverSession {
+         out
+     }
+ 
++    /// The codec of the frames this session currently hands out.
++    pub fn codec(&self) -> Codec {
++        self.codec
++    }
++
+     fn on_connected(&mut self, now: Now, out: &mut Vec<ReceiverAction>) {
+         self.connected = true;
+         self.deframer.reset();
+         self.params.reset();
++        self.codec = Codec::H264;
+         self.clock.reset();
+         self.cursor_seq.reset();
+         self.udp_flow = None;
+@@ -301,7 +312,21 @@ impl ReceiverSession {
+                 }
+             }
+             ControlMessage::CursorImg(i) => out.push(ReceiverAction::CursorImage(i)),
+-            ControlMessage::StreamConfig(s) => out.push(ReceiverAction::StreamConfig(s)),
++            ControlMessage::StreamConfig(s) => {
++                match Codec::from_token(&s.codec) {
++                    Some(codec) if codec != self.codec => {
++                        // Another bitstream: nothing seen so far applies to it.
++                        self.codec = codec;
++                        self.params.reset();
++                        self.waiting_for_idr = true;
++                    }
++                    Some(_) => {}
++                    None => {
++                        self.warn_once(format!("streamConfig selects unknown codec `{}`", s.codec), out)
++                    }
++                }
++                out.push(ReceiverAction::StreamConfig(s));
++            }
+             ControlMessage::Ping(p) => out.push(ReceiverAction::SenderHealth(p)),
+             ControlMessage::Unknown { kind, .. } => {
+                 self.counters.control_ignored += 1;
+@@ -316,7 +341,7 @@ impl ReceiverSession {
+     }
+ 
+     fn on_video(&mut self, now: Now, payload: &[u8], out: &mut Vec<ReceiverAction>) {
+-        let frame = match VideoFrame::parse(payload) {
++        let frame = match VideoFrame::parse_as(payload, self.codec) {
+             Ok(f) => f,
+             Err(e) => {
+                 self.warn_once(format!("undecodable video frame: {e}"), out);
+-- 
+2.43.0
+

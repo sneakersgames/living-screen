@@ -55,6 +55,8 @@ lit_until=$((now + PANEL_OFF_DELAY))
 alone_since=$now
 had_cable=0
 had_session=0
+load_logged=0
+LOAD_LOG_INTERVAL=${ODIMAC_LOAD_INTERVAL:-60}
 log "started (panel off after ${PANEL_OFF_DELAY}s idle, suspend after ${SUSPEND_AFTER}s)"
 
 while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
@@ -84,6 +86,20 @@ while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
   (( !session && had_session )) && log "sender disconnected"
   had_cable=$cable
   had_session=$session
+
+  # During a session, note the machine's load in the journal once a minute.
+  if (( session )); then
+    if (( now - load_logged >= LOAD_LOG_INTERVAL )); then
+      # The command substitution cannot update the baseline; the second
+      # call does.
+      line=$(load_sample)
+      load_sample >/dev/null
+      [[ -n $line ]] && log "load: $line"
+      load_logged=$now
+    fi
+  else
+    load_logged=0
+  fi
 
   if (( session )); then
     set_panel on "sender connected"

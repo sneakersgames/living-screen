@@ -9,6 +9,7 @@
 #
 #   OPENDISPLAY_REPO   git URL of the OpenDisplay source (default: upstream)
 #   OPENDISPLAY_REF    branch or tag to build the receiver from (default: v1.30.3)
+#   OPENDISPLAY_PATCHES=0  build the receiver without patches/opendisplay
 #   KERNEL_PKGVER      pinned Arch kernel package (default: 7.2.11.arch1-1, with the
 #                      5K panel driver); "current" for Arch's kernel and 4K
 #   RECEIVER_CHECK=1   also run the receiver's test suite
@@ -22,7 +23,7 @@ mkdir -p out/cache/pacman
 exec "$docker" run --rm --privileged --platform linux/amd64 \
   -v "$PWD":/src:ro -v "$PWD/out":/out \
   -v "$PWD/out/cache/pacman":/var/cache/pacman/pkg \
-  -e OPENDISPLAY_REPO -e OPENDISPLAY_REF -e RECEIVER_CHECK -e KERNEL_PKGVER \
+  -e OPENDISPLAY_REPO -e OPENDISPLAY_REF -e OPENDISPLAY_PATCHES -e RECEIVER_CHECK -e KERNEL_PKGVER \
   -e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY -e https_proxy -e http_proxy -e no_proxy \
   ${DOCKER_ARGS:-} \
   "${BUILD_IMAGE:-archlinux:latest}" /src/scripts/build-inner.sh

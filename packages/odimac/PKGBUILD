@@ -1,6 +1,6 @@
 # The appliance layer: kiosk session, power policy, network setup, installer.
 pkgname=odimac
-pkgver=0.2.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Turns an Intel iMac into a single-purpose OpenDisplay screen"
 arch=('any')
@@ -9,7 +9,7 @@ license=('GPL-3.0-only')
 depends=(
   'opendisplay-receiver'
   'sway' 'swaybg' 'polkit' 'nftables'
-  'mesa' 'gst-plugin-va' 'libva-utils' 'gstreamer' 'gst-plugins-ugly'
+  'mesa' 'gst-plugin-va' 'libva-utils' 'gstreamer' 'ffmpeg'
   'brightnessctl' 'iproute2' 'util-linux' 'systemd'
   'dosfstools' 'e2fsprogs' 'arch-install-scripts'   # odimac-install
 )

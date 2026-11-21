@@ -14,8 +14,8 @@ iMac) and the installer.
 **Status: runs on a real iMac18,3 from the live stick.** Confirmed there:
 the panel at 5120x2880, hardware H.264 and HEVC decoding, the Thunderbolt
 link to an Apple silicon MacBook, and a session started from the Mac's
-OpenDisplay menu. Not yet confirmed: the Mac connecting by itself when the
-cable is plugged in, and the installer on real hardware.
+OpenDisplay menu, and the Mac connecting by itself over the cable when it is
+plugged in. Not yet confirmed: the installer on real hardware.
 
 ## What is in it
 
@@ -52,8 +52,10 @@ This produces `out/odimac-<date>-x86_64.iso` and the `odimac` packages.
   driver are compiled once and kept in `out/cache` (as are downloaded
   packages); after that a build only reassembles the image. They are rebuilt
   when what they are made from changes. Delete `out/cache` to start over.
-- **Other receiver source:** it is built from upstream tag `v1.30.3`; set
-  `OPENDISPLAY_REPO` and `OPENDISPLAY_REF` for a fork or another tag.
+- **Other receiver source:** it is built from upstream tag `v1.30.3` plus
+  the patches in `patches/opendisplay`; set `OPENDISPLAY_REPO` and
+  `OPENDISPLAY_REF` for a fork or another tag, and `OPENDISPLAY_PATCHES=0`
+  to leave the patches out.
 - **Without Docker:** the "Build ISO" workflow under the repository's
   Actions tab builds the same image and attaches it to the run.
 
@@ -143,6 +145,8 @@ An iMac with a Fusion Drive shows two disks; install onto the SSD.
 | `SUSPEND_AFTER` | `0` | Seconds without cable and session before suspending; `0` never suspends |
 | `BRIGHTNESS` | unset | Panel brightness in percent, if the kernel offers backlight control |
 | `RECEIVER_DEVICE` | `Mac` | See the comment in the file |
+| `RECEIVER_DECODER` | `avdec_h264` | Video decoder; see the comment in the file |
+| `RECEIVER_HEVC` | `1` | Offer HEVC, for a native 5K stream; `0` for H.264 at 4096x2304 |
 | `RECEIVER_EXTRA_ARGS` | empty | Passed to `od-receiver` |
 
 Compositor overrides, such as another scale, go in
@@ -153,7 +157,9 @@ and always reacts to the cable. Set a value only after the suspend test
 showed that the cable wakes it; otherwise a suspended iMac needs its power
 button.
 
-Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
+Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`. During a session
+the journal gets one `load:` line a minute (CPU use, the receiver's share,
+temperatures, fan speed); `odimac-doctor load` shows the same live.
 
 ## Known limits
 
@@ -165,8 +171,11 @@ Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
   [ahmadtv/omarchy-imac18-3](https://github.com/ahmadtv/omarchy-imac18-3)
   (upstream thread drm/amd#4455), which presents both halves as one display.
   See "The 5K driver" below.
-- **The stream is H.264, at most 4096x2304.** A native 5K stream also needs
-  HEVC in the Linux receiver.
+- **Native 5K stream (HEVC) is new and untested on hardware.** The receiver
+  is built with `patches/opendisplay/0001-linux-receiver-hevc.patch`, which
+  makes it decode HEVC and offer it to the Mac. An Apple silicon Mac then
+  sends 5120x2880 instead of H.264 at 4096x2304. Tested here with a test
+  sender at 1280x720 only. `RECEIVER_HEVC=0` goes back to H.264.
 - **Suspend is not usable.** On the iMac18,3 the machine resumes but the
   Thunderbolt and USB controllers do not come back
   (`thunderbolt 0000:07:00.0: not ready after resume; giving up`). Keep
@@ -175,9 +184,13 @@ Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`.
   down cleanly.
 - **The stream is not encrypted.** The cable is private, and the firewall
   keeps the receiver off the Ethernet network.
-- **About 30 frames per second at "Best" quality.** Measured on an iMac18,3:
-  decoding a 4096x2304 frame takes about 34 ms. `odimac-doctor decode-bench`
-  shows whether the decoder or the copying of frames is the limit.
+- **Frame rate is set by the MacBook's encoder**, not the iMac (its log
+  counts the frames it skips as `enc↓`). Measured on an iMac18,3 over the
+  cable with an Apple silicon MacBook at "Best": about 45 frames per second
+  with H.264 at 4096x2304, 13 to 18 ms from capture to display. OpenDisplay's
+  own figure for HEVC at 5120x2880 is about 30.
+- **Connecting takes about 20 seconds after the cable is plugged in.** The
+  Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
 - The Mac only connects by itself when the cable appears. If the Mac sender
   is started with the cable already in, pick the iMac from its menu once.

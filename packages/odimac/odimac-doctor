@@ -3,6 +3,7 @@
 #   odimac-doctor                 report on panel, decoding, Thunderbolt, receiver
 #   odimac-doctor suspend-test    check that suspend works and what wakes it
 #   odimac-doctor decode-bench    measure how fast this machine decodes a 4K stream
+#   odimac-doctor load            watch CPU use, temperatures and fan (Ctrl+C stops)
 . /usr/lib/odimac/common.sh
 
 h() { printf '\n== %s ==\n' "$*"; }
@@ -83,6 +84,10 @@ report() {
   journalctl -b -t odimac-receiver -t odimac-powerd --no-pager -o cat 2>/dev/null |
     grep -v " INFO stats " | cut -c1-160 | tail -n 20
 
+  h "Load"
+  load_sample; sleep 2; load_sample
+  journalctl -b -t odimac-powerd --no-pager -o cat 2>/dev/null | grep '^load: ' | tail -n 5
+
   h "Power"
   echo "sleep states: $(cat /sys/power/state 2>/dev/null)  mem_sleep: $(cat /sys/power/mem_sleep 2>/dev/null)"
   echo "PANEL_OFF_DELAY=$PANEL_OFF_DELAY SUSPEND_AFTER=$SUSPEND_AFTER"
@@ -122,45 +127,57 @@ MSG
 }
 
 decode_bench() {
-  local w=${BENCH_WIDTH:-4096} h=${BENCH_HEIGHT:-2304} n=${BENCH_FRAMES:-240}
-  local dir clip
+  local n=${BENCH_FRAMES:-240} dir
   dir=$(mktemp -d) || exit 1
   trap 'rm -rf "$dir"' EXIT
-  clip=$dir/clip.h264
-  echo "Making a ${w}x${h} H.264 test clip of $n frames (about half a minute)..."
-  gst-launch-1.0 -q videotestsrc num-buffers="$n" pattern=zone-plate kx2=20 ky2=20 kt=1 \
-    ! "video/x-raw,format=I420,width=$w,height=$h,framerate=60/1" \
-    ! x264enc bitrate=18000 speed-preset=ultrafast tune=zerolatency key-int-max=600 \
-    ! h264parse ! "video/x-h264,stream-format=byte-stream" ! filesink location="$clip" \
-    || { echo "could not make the test clip"; exit 1; }
-  bench() { # label, decoder pipeline
+  bench() { # clip, parser, label, decoder pipeline
     local t0 t1
     t0=$(date +%s.%N)
     # shellcheck disable=SC2086
-    if gst-launch-1.0 -q filesrc location="$clip" ! h264parse ! $2 ! fakesink sync=false 2>/dev/null; then
+    if gst-launch-1.0 -q filesrc location="$1" ! $2 ! $4 ! fakesink sync=false 2>/dev/null; then
       t1=$(date +%s.%N)
-      awk -v n="$n" -v a="$t0" -v b="$t1" -v l="$1" \
+      awk -v n="$n" -v a="$t0" -v b="$t1" -v l="$3" \
         'BEGIN { printf "  %-34s %5.0f fps  (%4.1f ms per frame)\n", l, n/(b-a), 1000*(b-a)/n }'
     else
-      printf '  %-34s not available\n' "$1"
+      printf '  %-34s cannot decode this\n' "$3"
     fi
   }
-  echo "Decoding it as fast as possible:"
-  bench "Radeon, frames stay on the GPU"  "vah264dec"
-  bench "Radeon, frames copied to memory" "vah264dec ! video/x-raw,format=NV12"
-  bench "CPU"                             "avdec_h264"
+  round() { # title, size, ffmpeg encoder options, format, parser, VA decoder, CPU decoder
+    local clip=$dir/clip.$4
+    echo "$1: making a $2 test clip of $n frames..."
+    # shellcheck disable=SC2086
+    ffmpeg -v error -y -f lavfi -i "testsrc2=size=$2:rate=60" -frames:v "$n" -pix_fmt yuv420p \
+      $3 -b:v 18M -f "$4" "$clip" || { echo "  could not make the test clip"; return; }
+    bench "$clip" "$5" "Radeon, frames stay on the GPU"  "$6"
+    bench "$clip" "$5" "Radeon, frames copied to memory" "$6 ! video/x-raw,format=NV12"
+    bench "$clip" "$5" "CPU"                             "$7"
+    echo
+  }
+  round "H.264 as streamed today" "${BENCH_H264_SIZE:-4096x2304}" \
+    "-c:v libx264 -preset ultrafast -tune zerolatency" h264 h264parse vah264dec avdec_h264
+  round "HEVC at native 5K" "${BENCH_HEVC_SIZE:-5120x2880}" \
+    "-c:v libx265 -preset ultrafast -tune zerolatency -x265-params log-level=error" hevc h265parse vah265dec avdec_h265
   cat <<'MSG'
-
-The Mac sends up to 55 frames per second, so 55 fps or more is what a smooth
-picture needs. If the first line is fast and the second slow, the receiver
-loses its time copying frames, which can be fixed in the receiver. If the
-first line is slow too, the Radeon's decoder is the limit.
+These are top speeds on an easy clip. The Mac sends at most 55 frames per
+second at the H.264 size and about 30 at native 5K, so a decoder is fast
+enough when it is comfortably above that.
 MSG
+}
+
+load_watch() {
+  echo "Every 2 seconds; connect a sender and move things around. Ctrl+C stops."
+  load_sample
+  while sleep 2; do
+    line=$(load_sample)
+    echo "$(date +%T)  $line"
+    load_sample >/dev/null
+  done
 }
 
 case ${1:-} in
   "") report ;;
   suspend-test) suspend_test ;;
   decode-bench) decode_bench ;;
-  *) sed -n '2,5s/^# //p' "$0"; exit 1 ;;
+  load) load_watch ;;
+  *) sed -n '2,6s/^# //p' "$0"; exit 1 ;;
 esac

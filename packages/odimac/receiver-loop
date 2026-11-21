@@ -1,7 +1,8 @@
 #!/bin/bash
 # Runs od-receiver forever inside the kiosk session.
 . /usr/lib/odimac/common.sh
-args=(--name "$RECEIVER_NAME" --device "$RECEIVER_DEVICE" --listen "0.0.0.0:$RECEIVER_PORT")
+args=(--name "$RECEIVER_NAME" --device "$RECEIVER_DEVICE" --listen "0.0.0.0:$RECEIVER_PORT" --decoder "$RECEIVER_DECODER")
+[[ $RECEIVER_HEVC == 1 ]] || args+=(--no-hevc)
 read -ra extra <<<"$RECEIVER_EXTRA_ARGS"
 # Ends with the compositor, so a restarted session starts clean.
 while [[ -S ${SWAYSOCK:-} ]]; do

@@ -24,7 +24,7 @@ chmod +x "$t/bin/"*
 : > "$t/panel.log"; : > "$t/systemctl.log"
 
 PATH="$t/bin:$PATH" ODIMAC_CONF="$t/conf" ODIMAC_LIB="$t/lib" ODIMAC_SYSFS="$t/sys" \
-  ODIMAC_POLL=0.2 "$here/packages/odimac/powerd" 2> "$t/powerd.log" &
+  ODIMAC_POLL=0.2 ODIMAC_LOAD_INTERVAL=2 "$here/packages/odimac/powerd" 2> "$t/powerd.log" &
 pid=$!
 
 fail=0
@@ -39,6 +39,8 @@ mkdir "$t/sys/class/net/thunderbolt0"
 sleep 1;   expect "lit when the cable is plugged in" on
 touch "$t/session"
 sleep 4.5; expect "stays lit during a session, past the idle delay" on
+if grep -q '^load: cpu ' "$t/powerd.log"; then echo "ok   logs the load during a session"
+else echo "FAIL no load line during the session"; fail=1; fi
 rm "$t/session"
 sleep 1.5; expect "still lit just after the session ends" on
 sleep 3;   expect "dark after the session ended" off
