@@ -52,6 +52,15 @@ hl.config({
     dwindle = { preserve_split = true },
     input = { kb_layout = "us", follow_mouse = 1 },
     cursor = { inactive_timeout = 3 },
+    -- Nothing that makes Hyprland change the panel's signal when a window
+    -- goes full screen or leaves it (HDR, content type, direct scanout): the
+    -- panel is plain SDR, and each such change is a modeset for the 5K
+    -- driver, which had a crash in exactly that path.
+    render = {
+        cm_auto_hdr       = 0,
+        send_content_type = false,
+        direct_scanout    = 0,
+    },
     misc = {
         force_default_wallpaper  = 0,
         disable_hyprland_logo    = true,

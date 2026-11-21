@@ -1,0 +1,82 @@
+From: odimac <odimac@localhost>
+Subject: [PATCH] drm/amd/display: tiled stitch: do not tear down the live root for a logical modeset
+
+On top of the iMac 5K stitch patches (ahmadtv/omarchy-imac18-3). A commit
+that asks for a modeset of the stitched root without changing what the
+panel is sent (fbcon or a second compositor setting the same mode, a
+change of HDR metadata or content type) had its stream removed in
+dm_update_crtc_state()'s disable pass, was then accepted "without
+reprogramming" in the enable pass, and hit
+BUG_ON(dm_new_crtc_state->stream == NULL): kernel BUG at
+amdgpu_dm.c:13878, with the modeset locks held, which freezes the display
+and soon the machine.
+
+Clear mode_changed for such a commit in amdgpu_dm_atomic_check(), before
+anything is taken down, and let the two gates in dm_update_crtc_state()
+apply only while the new state still has its stream.
+---
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+@@ -13533,7 +13533,14 @@
+ 		dm_new_conn_state = to_dm_connector_state(drm_new_conn_state);
+ 		dm_old_conn_state = to_dm_connector_state(drm_old_conn_state);
+ 
+-		if (amdgpu_dm_tiled_stitch_has_live_root_stream(aconnector,
++		/*
++		 * Only while the new state still holds the stream: once the
++		 * disable pass has removed it there is nothing left to keep,
++		 * and skipping the modeset would run into the BUG_ON below
++		 * skip_modeset.
++		 */
++		if (dm_new_crtc_state->stream &&
++		    amdgpu_dm_tiled_stitch_has_live_root_stream(aconnector,
+ 								dm_old_crtc_state,
+ 								new_crtc_state)) {
+ 			drm_info(adev_to_drm(adev),
+@@ -13605,7 +13612,8 @@
+ 		if (ret)
+ 			goto fail;
+ 
+-		if (amdgpu_dm_tiled_stitch_has_live_root_stream(aconnector,
++		if (dm_new_crtc_state->stream &&
++		    amdgpu_dm_tiled_stitch_has_live_root_stream(aconnector,
+ 								dm_old_crtc_state,
+ 								new_crtc_state)) {
+ 			drm_info(adev_to_drm(adev),
+@@ -14873,6 +14881,36 @@
+ 			new_crtc_state->connectors_changed = true;
+ 	}
+ 
++	/*
++	 * Tiled stitch: a modeset of the stitched root that leaves it active,
++	 * on the same connector and in the stitched mode sends the panel
++	 * nothing new (a console or a second compositor setting the mode
++	 * again, a change of HDR metadata or content type). Say so here,
++	 * before the planes and the stream are taken down for a modeset:
++	 * dm_update_crtc_state() only decides that in its enable pass, after
++	 * its disable pass has already removed the stream.
++	 */
++	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
++		if (!new_crtc_state->mode_changed ||
++		    new_crtc_state->active_changed ||
++		    new_crtc_state->connectors_changed)
++			continue;
++
++		connector = amdgpu_dm_find_first_crtc_matching_connector(state, crtc);
++		if (!connector ||
++		    !amdgpu_dm_tiled_stitch_has_live_root_stream(
++				to_amdgpu_dm_connector(connector),
++				to_dm_crtc_state(old_crtc_state), new_crtc_state) ||
++		    !amdgpu_dm_tiled_stitch_mode_is_stitched(connector,
++							     &new_crtc_state->mode))
++			continue;
++
++		drm_info(dev,
++			 "TILED_STITCH: logical modeset of live root needs no reprogramming connector=%s crtc=%d\n",
++			 connector->name, crtc->base.id);
++		new_crtc_state->mode_changed = false;
++	}
++
+ 	if (dc_resource_is_dsc_encoding_supported(dc)) {
+ 		for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+ 			dm_new_crtc_state = to_dm_crtc_state(new_crtc_state);

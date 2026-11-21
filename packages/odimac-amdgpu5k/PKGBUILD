@@ -5,7 +5,7 @@
 source ./krel
 pkgname=odimac-amdgpu5k
 pkgver=${_krel//-/.}
-pkgrel=1
+pkgrel=2
 pkgdesc="amdgpu with native 5120x2880 on the iMac 5K panel, for linux ${_krel}"
 arch=('x86_64')
 url="https://github.com/ahmadtv/omarchy-imac18-3"

@@ -13,6 +13,8 @@
 # module that might load and misbehave.
 set -euo pipefail
 KREL=${1:?kernel release} WORK=${2:?work dir} OUT=${3:?output file}
+# Our own fixes to the patched driver, applied last (patches/amdgpu/*.patch).
+OWN_PATCHES=$(cd "$(dirname "$0")/../patches/amdgpu" 2>/dev/null && pwd || true)
 PATCH_REPO=https://github.com/ahmadtv/omarchy-imac18-3
 PATCH_COMMIT=f8f6ca8095074d7535cab01ff127b3ee07842bb9
 # Applied in this order; sha256 pins the exact content.
@@ -76,6 +78,15 @@ for entry in "${PATCHES[@]}"; do
   say "applying $name"
   patch -p1 --fuzz=0 --quiet < "$p"
 done
+
+if [[ -n $OWN_PATCHES ]]; then
+  for p in "$OWN_PATCHES"/*.patch; do
+    [[ -e $p ]] || continue
+    patch -p1 --dry-run --force --fuzz=0 < "$p" >/dev/null || die "${p##*/} does not apply cleanly"
+    say "applying ${p##*/} (ours)"
+    patch -p1 --fuzz=0 --quiet < "$p"
+  done
+fi
 
 # Arch's kernel is kernel.org plus a few patches. The module is only safe if
 # every header it compiles against is the one the kernel was built with.

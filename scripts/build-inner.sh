@@ -88,7 +88,7 @@ if [[ $KERNEL_PKGVER != current ]]; then
   }
 
   echo "==> kernel $krel with the 5K panel driver"
-  key=$(cat "$SRC/scripts/build-amdgpu5k.sh" "$SRC"/packages/odimac-amdgpu5k/* | sha256sum | cut -c1-12)
+  key=$(cat "$SRC/scripts/build-amdgpu5k.sh" "$SRC"/packages/odimac-amdgpu5k/* "$SRC"/patches/amdgpu/*.patch | sha256sum | cut -c1-12)
   k5_cache=$CACHE/amdgpu5k-$KERNEL_PKGVER-$key
   if compgen -G "$k5_cache/odimac-amdgpu5k-*.pkg.tar.zst" >/dev/null; then
     echo "    cached"
