@@ -3,6 +3,7 @@
 #   odimac-doctor                 report on panel, decoding, Thunderbolt, receiver
 #   odimac-doctor suspend-test    check that suspend works and what wakes it
 #   odimac-doctor decode-bench    measure how fast this machine decodes a 4K stream
+#   odimac-doctor last-start      the last lines logged before the previous shutdown or freeze
 #   odimac-doctor load            watch CPU use, temperatures and fan (Ctrl+C stops)
 . /usr/lib/odimac/common.sh
 
@@ -209,5 +210,10 @@ case ${1:-} in
   suspend-test) suspend_test ;;
   decode-bench) decode_bench ;;
   load) load_watch ;;
-  *) sed -n '2,6s/^# //p' "$0"; exit 1 ;;
+  last-start)
+    # What the machine wrote last before it went down, or stopped responding.
+    journalctl -b -1 -n "${2:-45}" --no-pager -o short 2>/dev/null | cut -c8-170 ||
+      echo "no log of an earlier start (the live stick keeps none)"
+    ;;
+  *) sed -n '2,7s/^# //p' "$0"; exit 1 ;;
 esac

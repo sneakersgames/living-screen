@@ -343,10 +343,13 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
-- **A frozen picture that takes no input** has been seen once, in
-  Moonlight's menu; the cause is not known yet. `odimac-doctor` lists
-  graphics card and kernel faults of this start and the previous one under
-  "Trouble". If the graphics card hangs and the driver resets it, the display
+- **The whole machine can stop** (picture stays, no key works, Caps Lock
+  does not light): seen in Moonlight's menu and after pulling the
+  Thunderbolt cable. The cause is not known yet. On the suspicion that the
+  Thunderbolt controller does not survive being powered down while idle, it
+  is now kept powered (`thunderbolt-awake`). After such a stop and a restart,
+  `odimac-doctor last-start` shows the last lines logged before it, and
+  `odimac-doctor` lists graphics card and kernel faults under "Trouble". If the graphics card hangs and the driver resets it, the display
   session is restarted by itself (`odimac-gpu-reset.service`); an open
   desktop is closed by that.
 - **No Wi-Fi and no Bluetooth set-up**, on the desktop either.

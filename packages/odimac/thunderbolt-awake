@@ -1,0 +1,19 @@
+#!/bin/bash
+# Keeps the Thunderbolt controller and the PCI bridges above it powered while
+# no cable is plugged in, instead of letting the kernel put them to sleep
+# after a few seconds. On the iMac18,3 this controller does not always come
+# back from sleep ("thunderbolt ...: not ready after resume" after a system
+# suspend). Run by 91-odimac-thunderbolt.rules when the driver takes the
+# controller; needs root.
+SYSFS="${ODIMAC_SYSFS:-/sys}"
+for dev in "$SYSFS"/bus/pci/drivers/thunderbolt/*:*; do
+  [[ -e $dev ]] || continue
+  path=$(readlink -f "$dev")
+  while [[ ${path##*/} == *:*:*.* ]]; do
+    if [[ -w $path/power/control && $(<"$path/power/control") != on ]]; then
+      echo on > "$path/power/control" 2>/dev/null && echo "odimac: ${path##*/} stays powered"
+    fi
+    path=${path%/*}
+  done
+done
+exit 0

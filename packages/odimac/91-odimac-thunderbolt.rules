@@ -1,0 +1,2 @@
+# See /usr/lib/odimac/thunderbolt-awake.
+ACTION=="bind", SUBSYSTEM=="pci", DRIVER=="thunderbolt", RUN+="/usr/lib/odimac/thunderbolt-awake"
