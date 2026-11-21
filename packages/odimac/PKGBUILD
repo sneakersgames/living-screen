@@ -1,6 +1,6 @@
 # The appliance layer: kiosk session, power policy, network setup, installer.
 pkgname=odimac
-pkgver=0.6.2
+pkgver=0.6.3
 pkgrel=1
 pkgdesc="Turns an Intel iMac into an OpenDisplay screen that can also stream games from a PC and be a desktop"
 arch=('any')
@@ -23,7 +23,7 @@ backup=('etc/odimac/odimac.conf')
 install=odimac.install
 _files=(odimac.conf common.sh receiver-loop powerd mode wake-sources sleep-hook
   gpu-reset 90-odimac-gpu-reset.rules odimac-gpu-reset.service
-  thunderbolt-awake 91-odimac-thunderbolt.rules
+  thunderbolt-awake 91-odimac-thunderbolt.rules sysctl.conf
   desktop-session hyprland.lua shell.qml odimac-desktop.service sudoers odimac-pacman-init.service
   sway.conf odimac-kiosk.service pam-odimac-kiosk sysusers.conf tmpfiles.conf
   polkit.rules 10-odimac-thunderbolt.network 15-odimac-ethernet.network
@@ -48,6 +48,7 @@ package() {
   install -Dm644 pam-odimac-kiosk "$pkgdir/etc/pam.d/odimac-kiosk"
   install -Dm644 sysusers.conf "$pkgdir/usr/lib/sysusers.d/odimac.conf"
   install -Dm644 tmpfiles.conf "$pkgdir/usr/lib/tmpfiles.d/odimac.conf"
+  install -Dm644 sysctl.conf "$pkgdir/usr/lib/sysctl.d/50-odimac.conf"
   install -Dm644 polkit.rules "$pkgdir/usr/share/polkit-1/rules.d/50-odimac.rules"
   install -Dm644 10-odimac-thunderbolt.network 15-odimac-ethernet.network \
     -t "$pkgdir/usr/lib/systemd/network"

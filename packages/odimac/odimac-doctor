@@ -81,6 +81,13 @@ report() {
   done
   echo "(nothing above this line: no graphics or kernel faults were logged)"
 
+  h "Network (gaming)"
+  for n in /sys/class/net/e*; do
+    [[ -e $n ]] || continue
+    echo "${n##*/}: $(cat "$n/operstate" 2>/dev/null), $(cat "$n/speed" 2>/dev/null || echo '?') Mbit/s (1000 expected; 100 means a poor cable or port)"
+  done
+  echo "receive buffer limit: $(( $(sysctl -n net.core.rmem_max) / 1024 )) KiB (8192 wanted for 4K streams)"
+
   h "Thunderbolt"
   if [[ -d /sys/bus/thunderbolt/devices ]]; then
     for d in /sys/bus/thunderbolt/devices/*; do
