@@ -356,9 +356,7 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
   ```
 
   and a restart. Whether this ends every freeze is not confirmed yet;
-  `odimac-doctor last-start` shows the last lines logged before a stop. The
-  Thunderbolt controller is also kept powered while idle
-  (`thunderbolt-awake`), on an earlier suspicion.
+  `odimac-doctor last-start` shows the last lines logged before a stop.
 - **No Wi-Fi and no Bluetooth set-up**, on the desktop either.
 - **Sound needs its own driver.** The 2017 iMac's audio chip (Cirrus
   CS8409 with a CS42L83) gets no sound out of the kernel's own driver. The

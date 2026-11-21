@@ -1,6 +1,6 @@
 # The appliance layer: kiosk session, power policy, network setup, installer.
 pkgname=odimac
-pkgver=0.6.3
+pkgver=0.6.4
 pkgrel=1
 pkgdesc="Turns an Intel iMac into an OpenDisplay screen that can also stream games from a PC and be a desktop"
 arch=('any')
@@ -23,7 +23,7 @@ backup=('etc/odimac/odimac.conf')
 install=odimac.install
 _files=(odimac.conf common.sh receiver-loop powerd mode wake-sources sleep-hook
   gpu-reset 90-odimac-gpu-reset.rules odimac-gpu-reset.service
-  thunderbolt-awake 91-odimac-thunderbolt.rules sysctl.conf
+  sysctl.conf
   desktop-session hyprland.lua shell.qml odimac-desktop.service sudoers odimac-pacman-init.service
   sway.conf odimac-kiosk.service pam-odimac-kiosk sysusers.conf tmpfiles.conf
   polkit.rules 10-odimac-thunderbolt.network 15-odimac-ethernet.network
@@ -34,8 +34,8 @@ sha256sums=($(printf 'SKIP %.0s' "${_files[@]}"))
 package() {
   install -Dm644 odimac.conf "$pkgdir/etc/odimac/odimac.conf"
   install -Dm644 common.sh "$pkgdir/usr/lib/odimac/common.sh"
-  install -Dm755 receiver-loop powerd mode wake-sources desktop-session gpu-reset thunderbolt-awake -t "$pkgdir/usr/lib/odimac"
-  install -Dm644 90-odimac-gpu-reset.rules 91-odimac-thunderbolt.rules -t "$pkgdir/usr/lib/udev/rules.d"
+  install -Dm755 receiver-loop powerd mode wake-sources desktop-session gpu-reset -t "$pkgdir/usr/lib/odimac"
+  install -Dm644 90-odimac-gpu-reset.rules -t "$pkgdir/usr/lib/udev/rules.d"
   install -Dm755 sleep-hook "$pkgdir/usr/lib/systemd/system-sleep/odimac-wake"
   install -Dm644 sway.conf "$pkgdir/usr/share/odimac/sway.conf"
   install -Dm644 hyprland.lua "$pkgdir/usr/share/odimac/hyprland.lua"
