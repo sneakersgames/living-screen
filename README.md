@@ -46,8 +46,9 @@ Runs on a real iMac18,3 from the live stick.
 | Brightness | confirmed |
 | Sound from the speakers | confirmed |
 | Desktop (Hyprland, the bar, Firefox, the file manager) | confirmed as a session of its own |
-| All three environments in one Hyprland session | starts and switches; froze when leaving a game (the driver bug under "Known limits") |
-| The driver fix for the freezes (`odimac` 0.7.1, `odimac-amdgpu5k` release 2) | **not tested on the iMac** |
+| All three environments in one Hyprland session | confirmed (`odimac` 0.7.1) |
+| Switching between a running game and the desktop, which froze before the driver fix | confirmed with `odimac-amdgpu5k` release 2 |
+| Plugging the Thunderbolt cable in and out, and the console (Ctrl+Alt+F2), after the driver fix | **not tested on the iMac** |
 | Installer | **not tested on the iMac** |
 | Suspend | does not work, see "Known limits" |
 
@@ -364,10 +365,11 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
   fixes the driver: such a request is recognised before anything is taken
   down, and no longer reaches the failing line. And `hyprland.lua` stops
   Hyprland from changing HDR, content type or direct scanout when a window
-  goes full screen or leaves it. The driver compiles with the fix; that the
-  freezes are gone is **not confirmed on the iMac yet**, and until it is,
-  Ctrl+Alt+F2 on an installed iMac is best avoided (the desktop's terminal
-  with `su` or `sudo`, or ssh, does the same).
+  goes full screen or leaves it. With both, going between a running game
+  and the desktop works on the iMac, where it froze every time before.
+  Ctrl+Alt+F2 on an installed iMac has **not been tried since**, and is best
+  avoided until it has (the desktop's terminal with `su` or `sudo`, or ssh,
+  does the same).
 
   `odimac-doctor` says under "Trouble" whether the installed driver has the
   fix, and lists the crash if it was logged. After a stop and a restart,
