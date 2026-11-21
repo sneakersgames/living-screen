@@ -50,7 +50,7 @@ report() {
   for el in vah264dec vah265dec avdec_h264; do
     printf 'GStreamer %-11s %s\n' "$el:" "$(gst-inspect-1.0 --exists "$el" 2>/dev/null && echo yes || echo no)"
   done
-  echo "(without vah264dec the receiver decodes on the CPU, which is too slow for 4K)"
+  echo "in use: $RECEIVER_DECODER (RECEIVER_DECODER; avdec_* decode on the CPU, va* on the Radeon)"
 
   h "Sound"
   sed -n 's/^ *\([0-9]\+\) \[\([^ ]*\) *\].*/card \1: \2/p' /proc/asound/cards 2>/dev/null
@@ -63,8 +63,10 @@ report() {
     echo "iMac sound driver: NOT installed (no speakers; USB audio works)"
   fi
   if uid=$(id -u odimac 2>/dev/null) && [[ -S /run/user/$uid/pipewire-0 ]]; then
-    runuser -u odimac -- env XDG_RUNTIME_DIR="/run/user/$uid" wpctl status 2>&1 |
-      sed -n '/Sinks:/,/Sources:/p' | sed '$d' | cut -c1-100
+    sinks=$(runuser -u odimac -- env XDG_RUNTIME_DIR="/run/user/$uid" wpctl status 2>&1 |
+      sed -n '/^Audio/,/^Video/p' | sed -n '/Sinks:/,/Sources:/p' | grep '[0-9]\. ' | cut -c1-100)
+    echo "outputs (* is the one in use):"
+    echo "${sinks:-  none: PipeWire sees no sound card}"
   else
     echo "PipeWire: NOT running for the display session (as user odimac: systemctl --user status pipewire.socket)"
   fi

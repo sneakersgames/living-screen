@@ -10,8 +10,13 @@ one key press apart:
 | **Ctrl+Alt+3** | Desktop | Arch Linux itself: [Hyprland](https://hypr.land) with a [Quickshell](https://quickshell.org) bar |
 
 The keys are pressed on a keyboard attached to the iMac and work everywhere,
-also during a game. **Ctrl+Alt+4** opens a bare terminal, for when the
-desktop does not start.
+also during a game. They are the **number keys**: Ctrl+Alt+F1, F2 and F3 are
+something else (Linux's virtual terminals; F2 is a console, and F1 returns
+from it, after which the number keys work again). **Ctrl+Alt+4** opens a
+bare terminal, for when the desktop does not start.
+
+The keyboard's brightness and volume keys work in all three, and act on the
+iMac.
 
 - Power on: it boots straight into the Mac display. No desktop, no login.
 - Plug a Thunderbolt cable into the MacBook: the panel lights up and the Mac
@@ -35,6 +40,7 @@ Runs on a real iMac18,3 from the live stick.
 | Mac display, H.264 at 4096x2304 | confirmed, about 45 frames per second |
 | Mac display, HEVC at native 5120x2880 | **not tested on the iMac** |
 | Gaming, picture and input | confirmed with Apollo on the PC |
+| Brightness control | confirmed (`brightnessctl`); the keys are new |
 | Sound (speakers, headphone jack) | **not tested on the iMac**: the driver is new in the image |
 | Desktop | **not tested on the iMac**; Hyprland has only parsed its config here, never drawn a frame |
 | Installer | **not tested on the iMac** |
@@ -258,7 +264,7 @@ An iMac with a Fusion Drive shows two disks; install onto the SSD.
 | `RECEIVER_NAME` | hostname | Name in the Mac's OpenDisplay menu |
 | `PANEL_OFF_DELAY` | `60` | Seconds the panel stays lit without a sender |
 | `SUSPEND_AFTER` | `0` | Seconds without cable and session before suspending; `0` never suspends |
-| `BRIGHTNESS` | unset | Panel brightness in percent, if the kernel offers backlight control |
+| `BRIGHTNESS` | unset | Panel brightness in percent at start; the keyboard's brightness keys change it afterwards |
 | `RECEIVER_DEVICE` | `Mac` | See the comment in the file |
 | `RECEIVER_DECODER` | `avdec_h264` | Video decoder; see the comment in the file |
 | `RECEIVER_HEVC` | `1` | Offer HEVC, for a native 5K stream; `0` for H.264 at 4096x2304 |
