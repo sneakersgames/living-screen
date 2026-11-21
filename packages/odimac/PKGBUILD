@@ -1,6 +1,6 @@
 # The appliance layer: kiosk session, power policy, network setup, installer.
 pkgname=odimac
-pkgver=0.5.2
+pkgver=0.6.0
 pkgrel=1
 pkgdesc="Turns an Intel iMac into an OpenDisplay screen that can also stream games from a PC and be a desktop"
 arch=('any')
@@ -12,6 +12,9 @@ depends=(
   'moonlight-qt' 'qt6-wayland' 'foot' 'ttf-dejavu'   # gaming and terminal modes
   'pipewire' 'pipewire-pulse' 'wireplumber'          # audio for Moonlight and the desktop
   'hyprland' 'quickshell' 'fuzzel' 'sudo'            # the desktop
+  'firefox' 'nautilus' 'gvfs' 'ffmpegthumbnailer' 'xdg-user-dirs'
+  'xdg-desktop-portal-hyprland' 'xdg-desktop-portal-gtk' 'hyprpolkitagent' 'mako'
+  'noto-fonts' 'noto-fonts-emoji'
   'mesa' 'gst-plugin-va' 'libva-utils' 'gstreamer' 'ffmpeg'
   'brightnessctl' 'iproute2' 'util-linux' 'systemd'
   'dosfstools' 'e2fsprogs' 'arch-install-scripts'   # odimac-install

@@ -40,9 +40,9 @@ Runs on a real iMac18,3 from the live stick.
 | Mac display, H.264 at 4096x2304 | confirmed, about 45 frames per second |
 | Mac display, HEVC at native 5120x2880 | **not tested on the iMac** |
 | Gaming, picture and input | confirmed with Apollo on the PC |
-| Brightness control | confirmed (`brightnessctl`); the keys are new |
-| Sound (speakers, headphone jack) | **not tested on the iMac**: the driver is new in the image |
-| Desktop | **not tested on the iMac**; Hyprland has only parsed its config here, never drawn a frame |
+| Brightness | confirmed |
+| Sound from the speakers | confirmed |
+| Desktop (Hyprland, the bar, switching to and from it) | confirmed; Firefox, the file manager and the Omarchy keys are new |
 | Installer | **not tested on the iMac** |
 | Suspend | does not work, see "Known limits" |
 
@@ -189,11 +189,25 @@ focused window's title, buttons for the other two environments, volume
 |---|---|
 | **Cmd+Return** | Terminal |
 | **Cmd+Space** | Program launcher |
-| **Cmd+Q** | Close the window |
-| **Cmd+1** … **9**, **Cmd+Shift+1** … **9** | Go to a workspace, move the window there |
-| **Cmd+arrows**, **Cmd+Shift+arrows** | Focus another window, move the window |
-| **Cmd+F**, **Cmd+V** | Full screen, floating |
+| **Cmd+Shift+B** | Firefox |
+| **Cmd+Shift+F** | Files (Nautilus) |
+| **Cmd+W** or **Cmd+Q** | Close the window |
+| **Cmd+1** … **0**, **Cmd+Shift+1** … **0** | Go to a workspace, move the window there |
+| **Cmd+Tab**, **Cmd+Shift+Tab** | Next, previous workspace |
+| **Cmd+arrows**, **Cmd+Shift+arrows** | Focus another window, swap the window with its neighbour |
+| **Alt+Tab** | Next window |
+| **Cmd+F**, **Cmd+Alt+F** | Full screen, full width |
+| **Cmd+T** | Floating or tiled |
+| **Cmd+J** | Turn the split between two windows |
+| **Cmd+−**, **Cmd+=** | Narrower, wider (with Shift: shorter, taller) |
+| **Cmd+G** | Group windows as tabs (**Cmd+Alt+Tab** goes through them) |
+| **Cmd+S** | Scratchpad: a workspace that slides over the others |
 | **Cmd+Shift+E** | Log out: closes every program and returns to the Mac display |
+
+Windows can also be moved and resized with the mouse: Cmd and the left or
+right button, or by their borders. The keys and the look are
+[Omarchy](https://omarchy.org)'s, without its menus and themes; Firefox,
+Files and Terminal also have buttons in the bar.
 
 Cmd is the Windows key on a PC keyboard.
 
@@ -206,16 +220,16 @@ Cmd is the Windows key on a PC keyboard.
   its home in `/var/lib/odimac`. That user has no password; `sudo` asks for
   root's, which is the one set during installation and is empty on the live
   stick (press Enter).
-- **Installing software.** The image comes with a terminal and a launcher
-  and nothing else: no browser, no file manager. With Ethernet plugged in:
+- **Installing software.** Firefox and a file manager are there. For
+  anything else, with Ethernet plugged in:
 
   ```bash
-  sudo pacman -Sy firefox
+  sudo pacman -Sy vlc
   ```
 
-  From the live stick this lands in memory and is gone at power-off.
   `sudo pacman -Syu` updates everything except the kernel, which is pinned
-  for the 5K driver.
+  for the 5K driver. On the live stick, installed software and every other
+  change is held in memory (half of it at most) and is gone at power-off.
 - **Your own settings.** `~/.config/hypr/odimac.lua` is read after the
   shipped configuration (`/usr/share/odimac/hyprland.lua`) and can change
   anything in it. Hyprland is configured in Lua these days; see
@@ -239,19 +253,29 @@ everything at power-off, including the receiver's ID, so the Mac may treat it
 as a new display each time. While the image is still changing, staying on
 the stick is simpler, because every new image means a reflash either way.
 
-From the root shell on the live stick:
+From the console of the live stick (Ctrl+Alt+F2), find the internal disk:
 
 ```bash
 lsblk -d
 ```
 
+Then install onto it, with your own time zone:
+
 ```bash
-odimac-install /dev/nvme0n1
+odimac-install --timezone Europe/Brussels /dev/nvme0n1
 ```
 
-This **erases the whole disk**, macOS included, after asking you to retype
-the disk path. Options: `--hostname NAME`, `--ssh-key FILE` (enables ssh for
-root with that public key), `--no-password` (locks the root account: no local login).
+This **erases the whole disk**, macOS and its recovery system included,
+after asking you to retype the disk path; there is no way back to macOS
+afterwards short of Apple's internet recovery (Option+Cmd+R at power-on).
+It then asks for a password for root, which is also what `sudo` asks for on
+the desktop. When it has finished, pull the stick and restart with
+`reboot`.
+
+Options: `--hostname NAME`, `--timezone ZONE` (without it the clock shows
+UTC; `timedatectl set-timezone` changes it later), `--ssh-key FILE` (enables
+ssh for root with that public key), `--no-password` (locks the root account:
+no console login and no `sudo`).
 
 An iMac with a Fusion Drive shows two disks; install onto the SSD.
 
@@ -319,20 +343,12 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
-- **The desktop is untested on the iMac.** Open questions: whether Hyprland
-  drives the panel through the 5K driver as sway does; whether the picture
-  survives switching between the two compositors (each switch sets the
-  panel's mode again, and the 5K driver is known to bring it up wrong at
-  times); and how the 2017 Radeon copes with Hyprland while the Mac's stream
-  is decoded in the background.
 - **No Wi-Fi and no Bluetooth set-up**, on the desktop either.
-- **Sound from the speakers is untested.** The 2017 iMac's audio chip
-  (Cirrus CS8409 with a CS42L83) gets no sound out of the kernel's own
-  driver. The image adds the `odimac-cs8409` package: the driver from
+- **Sound needs its own driver.** The 2017 iMac's audio chip (Cirrus
+  CS8409 with a CS42L83) gets no sound out of the kernel's own driver. The
+  image adds the `odimac-cs8409` package: the driver from
   [jackdanyell/imac18-3-cs8409-linux-audio](https://github.com/jackdanyell/imac18-3-cs8409-linux-audio),
-  built for the pinned kernel. It compiles; whether it plays is for the iMac
-  to say. `odimac-doctor` has a "Sound" section. USB speakers or a USB
-  headset work without it.
+  built for the pinned kernel. `odimac-doctor` has a "Sound" section.
 - **Gaming: how fast the Radeon decodes Moonlight's stream is not
   measured.** If the picture lags, choose software decoding in Moonlight's
   settings.

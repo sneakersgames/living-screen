@@ -152,7 +152,9 @@ sed -i -e 's/^iso_name=.*/iso_name="odimac"/' \
        -e 's/^iso_application=.*/iso_application="OpenDisplay iMac appliance"/' \
        "$profile/profiledef.sh"
 # Quiet boot straight into the display session.
-quiet='quiet loglevel=3 systemd.show_status=false rd.udev.log_level=3 vt.global_cursor_default=0'
+# cow_spacesize: on the live stick, everything written (installed software
+# included) is held in memory, 256M of it unless told otherwise.
+quiet='quiet loglevel=3 systemd.show_status=false rd.udev.log_level=3 vt.global_cursor_default=0 cow_spacesize=50%'
 find "$profile/efiboot" -name '*.conf' -path '*entries*' -exec sed -i "/^options/ s/\$/ $quiet/" {} +
 find "$profile" -name 'grub.cfg' -exec sed -i -E "/^\s*linux\s.*vmlinuz/ s/\$/ $quiet/" {} +
 find "$profile/efiboot" -name loader.conf -exec sed -i 's/^timeout.*/timeout 2/' {} +

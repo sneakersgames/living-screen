@@ -1,12 +1,16 @@
 -- The desktop of the OpenDisplay iMac appliance (Ctrl+Alt+3): Hyprland with a
 -- Quickshell bar, on a virtual terminal of its own beside the kiosk session.
 -- Started by odimac-desktop.service through /usr/lib/odimac/desktop-session.
+-- Window management follows Omarchy's defaults (https://omarchy.org): the
+-- same keys and the same plain look.
 -- Your own settings go in ~/.config/hypr/odimac.lua, which is read last and
 -- can change anything set here.
 
 local mode     = "systemd-cat -t odimac-mode /usr/lib/odimac/mode "
 local terminal = "foot"
 local menu     = "fuzzel"
+local browser  = "firefox"
+local files    = "nautilus --new-window"
 local mod      = "SUPER" -- the Command key on an Apple keyboard
 
 -- Retina, as in the kiosk session: a 2560x1440 desktop on the 5K panel.
@@ -17,17 +21,19 @@ hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 
 hl.config({
     general = {
-        gaps_in     = 4,
-        gaps_out    = 8,
+        gaps_in     = 5,
+        gaps_out    = 10,
         border_size = 2,
         col = {
-            active_border   = "rgba(8aadf4ee)",
-            inactive_border = "rgba(494d64aa)",
+            active_border   = { colors = { "rgba(33ccffee)", "rgba(00ff99ee)" }, angle = 45 },
+            inactive_border = "rgba(595959aa)",
         },
+        resize_on_border        = true,
+        extend_border_grab_area = 8,
         layout = "dwindle",
     },
     decoration = {
-        rounding = 8,
+        rounding = 0,
         -- The 2017 Radeon also decodes the Mac's stream in the background.
         blur   = { enabled = false },
         shadow = { enabled = false },
@@ -48,6 +54,10 @@ hl.config({
 hl.on("hyprland.start", function()
     hl.exec_cmd("qs -p /usr/share/odimac/quickshell")
     hl.exec_cmd(mode .. "watch")
+    hl.exec_cmd("mako")                                  -- notifications
+    hl.exec_cmd("systemctl --user start hyprpolkitagent") -- password prompts
+    hl.exec_cmd("xdg-user-dirs-update")                  -- Documents, Downloads, ...
+    hl.exec_cmd("gsettings set org.gnome.desktop.interface color-scheme prefer-dark")
     -- The 5K driver can bring the panel up with half the picture stretched
     -- across it; turning it off and on once corrects that (PANEL_POWER_CYCLE).
     if os.getenv("ODIMAC_PANEL_CYCLE") == "1" then
@@ -60,27 +70,57 @@ hl.bind("CTRL + ALT + 1", hl.dsp.exec_cmd(mode .. "display"), { locked = true })
 hl.bind("CTRL + ALT + 2", hl.dsp.exec_cmd(mode .. "game"),    { locked = true })
 hl.bind("CTRL + ALT + 4", hl.dsp.exec_cmd(mode .. "shell"),   { locked = true })
 
-hl.bind(mod .. " + Return", hl.dsp.exec_cmd(terminal))
-hl.bind(mod .. " + Space",  hl.dsp.exec_cmd(menu))
-hl.bind(mod .. " + Q",      hl.dsp.window.close())
-hl.bind(mod .. " + F",      hl.dsp.window.fullscreen())
-hl.bind(mod .. " + V",      hl.dsp.window.float({ action = "toggle" }))
-hl.bind(mod .. " + J",      hl.dsp.layout("togglesplit"))
--- Log out: closes every program on the desktop and returns to the Mac's display.
+-- Programs.
+hl.bind(mod .. " + Return",         hl.dsp.exec_cmd(terminal))
+hl.bind(mod .. " + Space",          hl.dsp.exec_cmd(menu))
+hl.bind(mod .. " + SHIFT + B",      hl.dsp.exec_cmd(browser))
+hl.bind(mod .. " + SHIFT + Return", hl.dsp.exec_cmd(browser))
+hl.bind(mod .. " + SHIFT + F",      hl.dsp.exec_cmd(files))
+-- Log out: closes every program on the desktop and returns to the Mac's
+-- display. (Not one of Omarchy's keys.)
 hl.bind(mod .. " + SHIFT + E", hl.dsp.exit())
 
-for _, dir in ipairs({ "left", "right", "up", "down" }) do
-    hl.bind(mod .. " + " .. dir,            hl.dsp.focus({ direction = dir }))
-    hl.bind(mod .. " + SHIFT + " .. dir,    hl.dsp.window.move({ direction = dir }))
+-- Windows.
+hl.bind(mod .. " + W",       hl.dsp.window.close())
+hl.bind(mod .. " + Q",       hl.dsp.window.close())
+hl.bind(mod .. " + J",       hl.dsp.layout("togglesplit"))
+hl.bind(mod .. " + P",       hl.dsp.window.pseudo())
+hl.bind(mod .. " + T",       hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mod .. " + F",       hl.dsp.window.fullscreen({ mode = "fullscreen" }))
+hl.bind(mod .. " + ALT + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
+for key, dir in pairs({ left = "l", right = "r", up = "u", down = "d" }) do
+    hl.bind(mod .. " + " .. key,         hl.dsp.focus({ direction = dir }))
+    hl.bind(mod .. " + SHIFT + " .. key, hl.dsp.window.swap({ direction = dir }))
 end
-for i = 1, 9 do
-    hl.bind(mod .. " + " .. i,              hl.dsp.focus({ workspace = i }))
-    hl.bind(mod .. " + SHIFT + " .. i,      hl.dsp.window.move({ workspace = i }))
+hl.bind("ALT + TAB",         hl.dsp.window.cycle_next())
+hl.bind("ALT + TAB",         hl.dsp.window.bring_to_top())
+hl.bind("ALT + SHIFT + TAB", hl.dsp.window.cycle_next({ next = false }))
+-- Resize with minus and equals.
+hl.bind(mod .. " + code:20",         hl.dsp.window.resize({ x = -100, y = 0, relative = true }))
+hl.bind(mod .. " + code:21",         hl.dsp.window.resize({ x = 100, y = 0, relative = true }))
+hl.bind(mod .. " + SHIFT + code:20", hl.dsp.window.resize({ x = 0, y = -100, relative = true }))
+hl.bind(mod .. " + SHIFT + code:21", hl.dsp.window.resize({ x = 0, y = 100, relative = true }))
+hl.bind(mod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
+hl.bind(mod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
+-- Groups: several windows in one place, as tabs.
+hl.bind(mod .. " + G",               hl.dsp.group.toggle())
+hl.bind(mod .. " + ALT + G",         hl.dsp.window.move({ out_of_group = true }))
+hl.bind(mod .. " + ALT + TAB",       hl.dsp.group.next())
+hl.bind(mod .. " + ALT + SHIFT + TAB", hl.dsp.group.prev())
+
+-- Workspaces. The number keys by position (code:10 is 1), so this works on
+-- every keyboard layout.
+for i = 1, 10 do
+    local key = "code:" .. (i + 9)
+    hl.bind(mod .. " + " .. key,         hl.dsp.focus({ workspace = i }))
+    hl.bind(mod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
 end
-hl.bind(mod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
-hl.bind(mod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
-hl.bind(mod .. " + mouse:272",  hl.dsp.window.drag(),   { mouse = true })
-hl.bind(mod .. " + mouse:273",  hl.dsp.window.resize(), { mouse = true })
+hl.bind(mod .. " + TAB",         hl.dsp.focus({ workspace = "m+1" }))
+hl.bind(mod .. " + SHIFT + TAB", hl.dsp.focus({ workspace = "m-1" }))
+hl.bind(mod .. " + mouse_down",  hl.dsp.focus({ workspace = "m+1" }))
+hl.bind(mod .. " + mouse_up",    hl.dsp.focus({ workspace = "m-1" }))
+hl.bind(mod .. " + S",           hl.dsp.workspace.toggle_special("scratchpad"))
+hl.bind(mod .. " + ALT + S",     hl.dsp.window.move({ workspace = "special:scratchpad", follow = false }))
 
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"), { locked = true, repeating = true })
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),      { locked = true, repeating = true })

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Installs the running live system onto a disk, erasing it.
-#   odimac-install [--hostname NAME] [--ssh-key FILE] [--no-password] DISK
+#   odimac-install [--hostname NAME] [--timezone ZONE] [--ssh-key FILE] [--no-password] DISK
 # Run from the live USB stick, e.g. `odimac-install /dev/nvme0n1`.
 set -euo pipefail
 
@@ -8,6 +8,7 @@ SRC=/run/archiso/airootfs
 MNT=/mnt/odimac
 hostname=imac-display
 ssh_key=
+timezone=
 set_password=1
 disk=
 
@@ -18,6 +19,7 @@ while (( $# )); do
   case $1 in
     --hostname) hostname=${2:?}; shift 2 ;;
     --ssh-key) ssh_key=${2:?}; shift 2 ;;
+    --timezone) timezone=${2:?}; shift 2 ;;
     --no-password) set_password=0; shift ;;
     -h|--help) usage 0 ;;
     -*) usage ;;
@@ -33,6 +35,7 @@ if [[ -z $disk ]]; then
 fi
 [[ -b $disk && $(lsblk -dno TYPE "$disk") == disk ]] || die "$disk is not a whole disk"
 [[ -z $ssh_key || -r $ssh_key ]] || die "cannot read $ssh_key"
+[[ -z $timezone || -f /usr/share/zoneinfo/$timezone ]] || die "unknown time zone $timezone (see: timedatectl list-timezones)"
 live=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)
 if [[ -n $live && $(lsblk -no PKNAME "$live" 2>/dev/null | head -n1) == "${disk##*/}" ]]; then
   die "$disk is the live stick"
@@ -76,6 +79,7 @@ UUID=$root_uuid  /      ext4  rw,noatime    0 1
 UUID=$esp_uuid   /boot  vfat  rw,umask=0077 0 2
 FSTAB
 echo "$hostname" > "$MNT/etc/hostname"
+[[ -z $timezone ]] || ln -sf "/usr/share/zoneinfo/$timezone" "$MNT/etc/localtime"
 : > "$MNT/etc/machine-id"
 # Undo what only the live stick needs.
 rm -f "$MNT/etc/mkinitcpio.conf.d/archiso.conf" "$MNT/etc/motd"

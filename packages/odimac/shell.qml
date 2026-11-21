@@ -1,4 +1,4 @@
-// The desktop's bar: workspaces, the focused window, the appliance's three
+// The desktop's bar: workspaces, three programs to start, the focused window, the appliance's three
 // environments, volume and clock. Run by hyprland.lua as
 // `qs -p /usr/share/odimac/quickshell` (this file is shell.qml there). To use your own instead, start it
 // from ~/.config/hypr/odimac.lua.
@@ -89,6 +89,20 @@ ShellRoot {
                         active: modelData.focused
                         onClicked: Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ workspace = " + modelData.id + " })"])
                     }
+                }
+
+                Pill {
+                    Layout.leftMargin: 12
+                    text: "Firefox"
+                    onClicked: Quickshell.execDetached(["firefox"])
+                }
+                Pill {
+                    text: "Files"
+                    onClicked: Quickshell.execDetached(["nautilus", "--new-window"])
+                }
+                Pill {
+                    text: "Terminal"
+                    onClicked: Quickshell.execDetached(["foot"])
                 }
 
                 Text {
