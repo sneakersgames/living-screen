@@ -3,7 +3,8 @@
 #
 #   panel on   while a sender is connected, and for PANEL_OFF_DELAY seconds
 #              after boot, resume, a cable plug-in or the end of a session;
-#              and for as long as the gaming or terminal mode is showing
+#              and for as long as the gaming, desktop or terminal mode is
+#              showing
 #   panel off  otherwise (output power off: backlight dark, machine idle)
 #   suspend    optional, only with no cable, no session and the display
 #              mode showing (SUSPEND_AFTER)
@@ -94,6 +95,9 @@ while [[ -z ${SWAYSOCK:-} || -S $SWAYSOCK ]]; do
   mode=$(current_mode)
   if [[ $mode != "$had_mode" ]]; then
     log "mode $mode"
+    # The desktop is another compositor on another virtual terminal, and
+    # what this one last did to the panel no longer holds: say it again.
+    panel=unknown
     # Back on the Mac's display: wait for a sender as after a session.
     [[ $mode == display ]] && lit_until=$((now + PANEL_OFF_DELAY))
   fi

@@ -1,24 +1,37 @@
 #!/bin/bash
-# Switches what the panel shows. Each mode is a sway workspace:
+# Switches what the panel shows.
 #
 #   mode display   the OpenDisplay receiver (the default)
 #   mode game      Moonlight, streaming games from a PC; started on first use
-#   mode shell     a terminal
+#   mode desktop   the Hyprland desktop; started on first use
+#   mode shell     a terminal in the kiosk session
 #   mode status    prints the current mode
 #   mode watch     returns to "display" after MODE_IDLE_RETURN seconds without
-#                  input (started once by the session)
+#                  input (started once by each session)
 #
-# "game" and "shell" keep running until their program exits, then return to
-# "display". The current mode is in $XDG_RUNTIME_DIR/odimac-mode, which is how
-# odimac-powerd knows to keep the panel lit.
+# "display", "game" and "shell" are workspaces of the kiosk's sway on virtual
+# terminal KIOSK_VT. "desktop" is a session of its own
+# (odimac-desktop.service) on DESKTOP_VT, so switching to and from it also
+# switches the virtual terminal. "game" and "shell" keep running until their
+# program exits, then return to "display"; the desktop keeps running in the
+# background until it is logged out of. The current mode is in
+# $XDG_RUNTIME_DIR/odimac-mode, which is how odimac-powerd knows to keep the
+# panel lit.
 . "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
-RUN="${ODIMAC_RUN:-${XDG_RUNTIME_DIR:-/tmp}}"
+RUN="${ODIMAC_RUN:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}}"
 state=$RUN/odimac-mode
 
 current() { cat "$state" 2>/dev/null || echo display; }
+record() { echo "$1" > "$state.new" && mv "$state.new" "$state"; }
+vt() {
+  busctl --system call org.freedesktop.login1 /org/freedesktop/login1/seat/seat0 \
+    org.freedesktop.login1.Seat SwitchTo u "$1" >/dev/null || echo "cannot switch to virtual terminal $1" >&2
+}
 switch_to() {
-  echo "$1" > "$state.new" && mv "$state.new" "$state"
+  local was; was=$(current)
+  record "$1"
   swaymsg -q "workspace $1"
+  [[ $was != desktop ]] || vt "$KIOSK_VT"
 }
 # Runs the mode's program unless it already is, and leaves the mode when it
 # exits (unless the user has switched elsewhere in the meantime).
@@ -29,6 +42,26 @@ hold() { # mode, function
   "$2"
   [[ $(current) == "$1" ]] && switch_to display
 }
+
+# For desktop-session.
+[[ ${1:-} == vt ]] && { vt "${2:?}"; exit; }
+
+# Called from outside the kiosk session (the desktop, its service): the modes
+# are the kiosk's to switch, so hand the command to its sway.
+if [[ -z ${SWAYSOCK:-} ]]; then
+  case ${1:-} in
+    display|game|desktop|shell|end)
+      sock=$(ls "$RUN"/sway-ipc.*.sock 2>/dev/null | head -n1)
+      [[ -S $sock ]] || { echo "the kiosk session is not running" >&2; exit 1; }
+      SWAYSOCK=$sock exec swaymsg -q exec "systemd-cat -t odimac-mode $0 $*"
+      ;;
+    idle)
+      # The desktop has been idle. (The kiosk's own watcher handles the rest.)
+      [[ $(current) == desktop ]] && exec "$0" display
+      exit 0
+      ;;
+  esac
+fi
 
 run_game() {
   local conf="${XDG_CONFIG_HOME:-$HOME/.config}/Moonlight Game Streaming Project/Moonlight.conf"
@@ -58,10 +91,32 @@ case ${1:-} in
   display) switch_to display ;;
   game)    hold game run_game ;;
   shell)   hold shell run_shell ;;
+  desktop)
+    record desktop
+    if ! systemctl start odimac-desktop.service; then
+      echo "the desktop did not start: journalctl -b -u odimac-desktop" >&2
+      switch_to display
+      exit 1
+    fi
+    vt "$DESKTOP_VT"
+    ;;
+  end) # MODE: back to display if MODE is showing (its program has exited)
+    [[ $(current) != "${2:-}" ]] || switch_to display
+    ;;
+  init) # at the start of the kiosk session; a running desktop stays in front
+    if [[ $(current) == desktop ]] && systemctl -q is-active odimac-desktop.service; then
+      swaymsg -q "workspace display"
+    else
+      switch_to display
+    fi
+    ;;
+  idle) # the kiosk has been idle, which it also is while the desktop is in use
+    [[ $(current) == desktop ]] || switch_to display
+    ;;
   status)  current ;;
   watch)
     (( MODE_IDLE_RETURN > 0 )) || exit 0
-    exec swayidle -w timeout "$MODE_IDLE_RETURN" "$0 display"
+    exec swayidle -w timeout "$MODE_IDLE_RETURN" "$0 idle"
     ;;
-  *) echo "usage: ${0##*/} display|game|shell|status|watch" >&2; exit 2 ;;
+  *) echo "usage: ${0##*/} display|game|desktop|shell|status|watch" >&2; exit 2 ;;
 esac

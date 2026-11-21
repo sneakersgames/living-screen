@@ -1,0 +1,4 @@
+# The desktop's user is the kiosk user, which has no password of its own:
+# sudo asks for root's (set by odimac-install; empty on the live stick).
+Defaults:odimac rootpw
+odimac ALL=(ALL:ALL) ALL

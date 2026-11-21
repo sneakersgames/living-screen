@@ -107,6 +107,14 @@ sed -i '/^\[options\]/a DisableSandbox' "$profile/pacman.conf"
 cp -r "$SRC/iso/airootfs/." "$profile/airootfs/"
 grep -v '^#' "$SRC/iso/packages.extra" >> "$profile/packages.x86_64"
 printf '%s\n' "${extra_packages[@]}" >> "$profile/packages.x86_64"
+# The image's own pacman.conf, for installing software on the iMac: Arch's
+# default, and with the pinned kernel left out of `pacman -Syu`, which the 5K
+# driver would otherwise block.
+if [[ $KERNEL_PKGVER != current ]]; then
+  sed -e '/^DisableSandbox$/d' -e 's/^#IgnorePkg .*/IgnorePkg   = linux linux-headers/' \
+    /etc/pacman.conf > "$profile/airootfs/etc/pacman.conf"
+  grep -q '^IgnorePkg' "$profile/airootfs/etc/pacman.conf" || { echo "could not set IgnorePkg in the image's pacman.conf" >&2; exit 1; }
+fi
 # Ahead of [core], so a pinned kernel in the local repository wins.
 sed -i "0,/^\\[core\\]/s||[odimac]\\nSigLevel = Optional TrustAll\\nServer = file://$REPO\\n\\n[core]|" "$profile/pacman.conf"
 grep -q '^\[odimac\]' "$profile/pacman.conf" || { echo "could not add the local repository to pacman.conf" >&2; exit 1; }

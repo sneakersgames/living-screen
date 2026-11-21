@@ -1,25 +1,43 @@
 # OpenDisplay iMac
 
-A small Arch Linux image that turns a 2017 Retina iMac into a screen for a
-MacBook, using [OpenDisplay](https://github.com/peetzweg/opendisplay).
+A small Arch Linux image that turns a 2017 Retina iMac into three things,
+one key press apart:
 
-- Power on: it boots straight into the OpenDisplay receiver. No desktop, no login.
+| Keys | Environment | |
+|---|---|---|
+| **Ctrl+Alt+1** | Mac display | The screen of a MacBook over a Thunderbolt cable, using [OpenDisplay](https://github.com/peetzweg/opendisplay). The default. |
+| **Ctrl+Alt+2** | Gaming | The screen of a Windows PC, streamed over the wired network with [Moonlight](https://moonlight-stream.org) |
+| **Ctrl+Alt+3** | Desktop | Arch Linux itself: [Hyprland](https://hypr.land) with a [Quickshell](https://quickshell.org) bar |
+
+The keys are pressed on a keyboard attached to the iMac and work everywhere,
+also during a game. **Ctrl+Alt+4** opens a bare terminal, for when the
+desktop does not start.
+
+- Power on: it boots straight into the Mac display. No desktop, no login.
 - Plug a Thunderbolt cable into the MacBook: the panel lights up and the Mac
   extends onto it on its own.
 - Unplug, or let the Mac sleep: the panel goes dark a minute later.
-- Press **Ctrl+Alt+2** on a keyboard attached to the iMac: it becomes the
-  screen of a gaming PC instead, through
-  [Moonlight](https://moonlight-stream.org). **Ctrl+Alt+1** returns to the
-  Mac. See "Gaming mode" below; this part has not run on a real iMac yet.
+- Gaming and the desktop start the first time their keys are pressed and
+  keep running in the background afterwards. Both return to the Mac display
+  after ten minutes without input.
 
 The same image is the live USB stick (for testing, nothing is written to the
 iMac) and the installer.
 
-**Status: runs on a real iMac18,3 from the live stick.** Confirmed there:
-the panel at 5120x2880, hardware H.264 and HEVC decoding, the Thunderbolt
-link to an Apple silicon MacBook, and a session started from the Mac's
-OpenDisplay menu, and the Mac connecting by itself over the cable when it is
-plugged in. Not yet confirmed: the installer on real hardware.
+## Status
+
+Runs on a real iMac18,3 from the live stick.
+
+| | |
+|---|---|
+| Panel at 5120x2880 (patched driver) | confirmed |
+| Thunderbolt link to an Apple silicon MacBook, connecting by itself on plug-in | confirmed |
+| Mac display, H.264 at 4096x2304 | confirmed, about 45 frames per second |
+| Mac display, HEVC at native 5120x2880 | **not tested on the iMac** |
+| Gaming | **not tested on the iMac** |
+| Desktop | **not tested on the iMac**; Hyprland has only parsed its config here, never drawn a frame |
+| Installer | **not tested on the iMac** |
+| Suspend | does not work, see "Known limits" |
 
 ## What is in it
 
@@ -27,15 +45,17 @@ plugged in. Not yet confirmed: the installer on real hardware.
 |---|---|
 | `opendisplay-receiver` | Upstream's Linux receiver, built from a release tag |
 | `odimac-kiosk.service` | Starts `sway` on tty1 as user `odimac`, at scale 2, with nothing but the receiver in it |
-| `mode` | Switches between the three sway workspaces: `display` (the receiver), `game` (Moonlight) and `shell` (a terminal) |
-| `odimac-powerd` | Lights the panel while a sender is connected, a cable was just plugged in, or the gaming or terminal mode is showing; darkens it otherwise, optionally suspends |
+| `mode` | Switches between the environments: `display` (the receiver), `game` (Moonlight) and `shell` (a terminal) are workspaces of that sway; `desktop` is a session of its own |
+| `odimac-desktop.service` | The desktop: Hyprland (`hyprland.lua`) and the Quickshell bar (`shell.qml`) on tty3, as the same user, started by Ctrl+Alt+3 |
+| `odimac-powerd` | Lights the panel while a sender is connected, a cable was just plugged in, or another environment than the Mac display is showing; darkens it otherwise, optionally suspends |
 | `10-odimac-thunderbolt.network` | Link-local addresses on the Thunderbolt link, which is how the Mac recognises a direct cable |
 | `odimac-doctor` | Reports on panel, hardware decoding, Thunderbolt and the receiver; runs the suspend test and a decode benchmark |
 | `odimac-install` | Copies the live system onto the internal disk |
 
 Everything except the receiver is in the `odimac` package
 (`packages/odimac/`). There is no Wi-Fi. Wired Ethernet gets DHCP if you
-plug it in, for maintenance and as the path to the gaming PC: a firewall (`odimac-firewall.service`)
+plug it in: it is the path to the gaming PC and the desktop's internet
+connection. A firewall (`odimac-firewall.service`)
 makes the receiver reachable and visible over the Thunderbolt cable alone, so
 a session can never end up on Wi-Fi by way of the iMac's Ethernet port.
 `systemctl disable --now odimac-firewall` lifts that.
@@ -52,7 +72,7 @@ This produces `out/odimac-<date>-x86_64.iso` and the `odimac` packages.
 
 - **Apple silicon Mac:** the build runs in an emulated x86_64 container. In
   Docker Desktop turn on Settings → General → "Use Rosetta for x86_64/amd64
-  emulation". Not tested on Apple silicon yet.
+  emulation".
 - **First build is slow, later ones are not.** The receiver and the 5K
   driver are compiled once and kept in `out/cache` (as are downloaded
   packages); after that a build only reassembles the image. They are rebuilt
@@ -113,23 +133,17 @@ idle state.
    odimac-doctor suspend-test
    ```
 
-## Gaming mode
+## Gaming
 
 The iMac can also be the only screen of a Windows PC, for games: the PC
 streams its picture over the wired network and the iMac shows it with
 Moonlight. Keyboard, mouse and controllers plugged into the iMac are passed
 on to the PC.
 
-| Keys | Mode |
-|---|---|
-| **Ctrl+Alt+1** | The Mac's display (the default) |
-| **Ctrl+Alt+2** | Gaming: Moonlight, started on first use |
-| **Ctrl+Alt+3** | A terminal on the iMac (user `odimac`); `exit` closes it |
-
-The keys also work during a game. Both modes return to the Mac's display
-when their program quits, or after ten minutes without input
-(`MODE_IDLE_RETURN`; a running stream does not count as idle). The Mac's
-session carries on in the background while another mode is showing.
+Ctrl+Alt+2 starts Moonlight on first use. It returns to the Mac display when
+Moonlight quits, or after ten minutes without input (`MODE_IDLE_RETURN`; a
+running stream does not count as idle). The Mac's session carries on in the
+background while another environment is showing.
 
 Set-up, once:
 
@@ -152,6 +166,57 @@ half the panel in each direction. Its settings and the pairing are kept in
 `/var/lib/odimac`, so from the live stick they are lost at power-off.
 During a stream, Ctrl+Alt+Shift+S shows Moonlight's statistics and
 Ctrl+Alt+Shift+Q ends the stream.
+
+## Desktop
+
+Ctrl+Alt+3 starts Hyprland with a bar across the top: workspaces, the
+focused window's title, buttons for the other two environments, volume
+(click mutes, the scroll wheel changes it) and the clock. The picture is
+2560x1440 at scale 2, as on the Mac display.
+
+| Keys | |
+|---|---|
+| **Cmd+Return** | Terminal |
+| **Cmd+Space** | Program launcher |
+| **Cmd+Q** | Close the window |
+| **Cmd+1** … **9**, **Cmd+Shift+1** … **9** | Go to a workspace, move the window there |
+| **Cmd+arrows**, **Cmd+Shift+arrows** | Focus another window, move the window |
+| **Cmd+F**, **Cmd+V** | Full screen, floating |
+| **Cmd+Shift+E** | Log out: closes every program and returns to the Mac display |
+
+Cmd is the Windows key on a PC keyboard.
+
+- **Leaving and coming back.** Ctrl+Alt+1 and Ctrl+Alt+2 leave the desktop
+  running with its programs open; Ctrl+Alt+3 brings it back as it was. After
+  ten minutes without input it returns to the Mac display by itself
+  (`MODE_IDLE_RETURN`; a playing video does not count as idle), and the panel
+  goes dark a minute later if no Mac is connected.
+- **Who you are.** The desktop runs as the appliance's user `odimac`, with
+  its home in `/var/lib/odimac`. That user has no password; `sudo` asks for
+  root's, which is the one set during installation and is empty on the live
+  stick (press Enter).
+- **Installing software.** The image comes with a terminal and a launcher
+  and nothing else: no browser, no file manager. With Ethernet plugged in:
+
+  ```bash
+  sudo pacman -Sy firefox
+  ```
+
+  From the live stick this lands in memory and is gone at power-off.
+  `sudo pacman -Syu` updates everything except the kernel, which is pinned
+  for the 5K driver.
+- **Your own settings.** `~/.config/hypr/odimac.lua` is read after the
+  shipped configuration (`/usr/share/odimac/hyprland.lua`) and can change
+  anything in it. Hyprland is configured in Lua these days; see
+  [its wiki](https://wiki.hypr.land/configuring/). The bar is
+  `/usr/share/odimac/quickshell/shell.qml`.
+- **If it does not start,** Ctrl+Alt+3 falls back to the Mac display. The
+  reason is in `journalctl -b -u odimac-desktop`, and Hyprland's own log in
+  `/run/user/*/hypr/*/hyprland.log`.
+
+The desktop is a second compositor on its own virtual terminal (tty3) beside
+the kiosk session on tty1, so Ctrl+Alt+F1 and Ctrl+Alt+F3 also switch between
+them. Ctrl+Alt+F2 is the console login.
 
 ## Install
 
@@ -196,17 +261,19 @@ An iMac with a Fusion Drive shows two disks; install onto the SSD.
 | `GAME_HOST` | empty | The gaming PC's address; empty opens Moonlight's own interface |
 | `GAME_APP` | `Desktop` | What to stream with `GAME_HOST` set |
 | `GAME_RESOLUTION`, `GAME_FPS` | `2560x1440`, `60` | Stream size and rate |
-| `MODE_IDLE_RETURN` | `600` | Seconds without input before the gaming and terminal modes return to the Mac's display; `0` never |
+| `MODE_IDLE_RETURN` | `600` | Seconds without input before gaming, the desktop and the terminal return to the Mac display; `0` never |
+| `PANEL_POWER_CYCLE` | `auto` | See "The 5K driver" |
 
-Compositor overrides, such as another scale, go in
-`/etc/odimac/sway.d/*.conf`.
+Overrides for the kiosk's compositor, such as another scale, go in
+`/etc/odimac/sway.d/*.conf`; for the desktop's, in
+`~/.config/hypr/odimac.lua`.
 
 With `SUSPEND_AFTER=0` the iMac never sleeps: with the panel dark it idles,
 and always reacts to the cable. Set a value only after the suspend test
 showed that the cable wakes it; otherwise a suspended iMac needs its power
 button.
 
-Logs: `journalctl -b -t odimac-receiver -t odimac-powerd`. During a session
+Logs: `journalctl -b -t odimac-receiver -t odimac-powerd -t odimac-mode`. During a session
 the journal gets one `load:` line a minute (CPU use, the receiver's share,
 temperatures, fan speed); `odimac-doctor load` shows the same live.
 
@@ -241,12 +308,19 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
 - **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
-- **Gaming mode is untested on the iMac.** Open questions: whether the
+- **The desktop is untested on the iMac.** Open questions: whether Hyprland
+  drives the panel through the 5K driver as sway does; whether the picture
+  survives switching between the two compositors (each switch sets the
+  panel's mode again, and the 5K driver is known to bring it up wrong at
+  times); and how the 2017 Radeon copes with Hyprland while the Mac's stream
+  is decoded in the background.
+- **No Wi-Fi and no Bluetooth set-up**, on the desktop either.
+- **Gaming is untested on the iMac.** Open questions: whether the
   internal speakers work (PipeWire is installed, but the 2017 iMac's audio
   chip may need a driver the image does not have; USB audio should work), and
   how fast the Radeon decodes Moonlight's stream. If the picture lags, choose
   software decoding in Moonlight's settings.
-- **Gaming mode does not wake the PC by itself.** Moonlight's menu on the
+- **Gaming does not wake the PC by itself.** Moonlight's menu on the
   PC's tile has "Wake PC" once the PC has been seen running.
 - The Mac only connects by itself when the cable appears. If the Mac sender
   is started with the cable already in, pick the iMac from its menu once.
@@ -266,12 +340,14 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
   ```
 
   The stock driver (3840x2160) is used from the next boot.
-- **Half the picture stretched across the panel:** the session power-cycles
-  the panel once at start to correct this (`PANEL_POWER_CYCLE`); if it still
-  happens, `systemctl restart odimac-kiosk`.
-- **Do not upgrade the kernel** (`pacman -Syu` refuses because the driver
-  package depends on the exact kernel). The patches support the 7.1 and 7.2
-  series only. To build an image with Arch's current kernel and the stock
+- **Half the picture stretched across the panel:** the kiosk session and
+  the desktop each power-cycle the panel once when they start to correct
+  this (`PANEL_POWER_CYCLE`); if it still happens, `systemctl restart
+  odimac-kiosk`, or on the desktop log out (Cmd+Shift+E) and press Ctrl+Alt+3
+  again.
+- **The kernel stays as it is.** The image's `pacman.conf` leaves `linux`
+  out of `pacman -Syu` (`IgnorePkg`), because the driver package fits one
+  exact kernel. The patches support the 7.1 and 7.2 series only. To build an image with Arch's current kernel and the stock
   driver: `KERNEL_PKGVER=current ./build.sh`.
 
 ## Develop
@@ -287,6 +363,15 @@ tests/mode-test.sh
 ```
 
 runs the sway config and the mode switching in a headless sway, with
-terminals standing in for Moonlight and the receiver (needs `sway`, `foot`
-and `jq`; skips itself without them). To update an
+terminals standing in for Moonlight and the receiver and stubs for the
+desktop's service (needs `sway`, `foot` and `jq`; skips itself without
+them).
+
+```bash
+tests/desktop-test.sh
+```
+
+has Hyprland parse `hyprland.lua` and loads the bar in a headless sway
+(needs `Hyprland`, `quickshell` and `sway`). It cannot start Hyprland
+itself, which needs a graphics card. To update an
 installed iMac, copy `out/odimac-*.pkg.tar.zst` over and `pacman -U` it.

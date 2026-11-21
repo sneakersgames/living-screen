@@ -1,8 +1,8 @@
 # The appliance layer: kiosk session, power policy, network setup, installer.
 pkgname=odimac
-pkgver=0.4.0
+pkgver=0.5.0
 pkgrel=1
-pkgdesc="Turns an Intel iMac into an OpenDisplay screen that can also stream games from a PC"
+pkgdesc="Turns an Intel iMac into an OpenDisplay screen that can also stream games from a PC and be a desktop"
 arch=('any')
 url="https://github.com/peetzweg/opendisplay"
 license=('GPL-3.0-only')
@@ -10,7 +10,8 @@ depends=(
   'opendisplay-receiver'
   'sway' 'swaybg' 'swayidle' 'polkit' 'nftables'
   'moonlight-qt' 'qt6-wayland' 'foot' 'ttf-dejavu'   # gaming and terminal modes
-  'pipewire' 'pipewire-pulse' 'wireplumber'          # Moonlight's audio
+  'pipewire' 'pipewire-pulse' 'wireplumber'          # audio for Moonlight and the desktop
+  'hyprland' 'quickshell' 'fuzzel' 'sudo'            # the desktop
   'mesa' 'gst-plugin-va' 'libva-utils' 'gstreamer' 'ffmpeg'
   'brightnessctl' 'iproute2' 'util-linux' 'systemd'
   'dosfstools' 'e2fsprogs' 'arch-install-scripts'   # odimac-install
@@ -18,6 +19,7 @@ depends=(
 backup=('etc/odimac/odimac.conf')
 install=odimac.install
 _files=(odimac.conf common.sh receiver-loop powerd mode wake-sources sleep-hook
+  desktop-session hyprland.lua shell.qml odimac-desktop.service sudoers odimac-pacman-init.service
   sway.conf odimac-kiosk.service pam-odimac-kiosk sysusers.conf tmpfiles.conf
   polkit.rules 10-odimac-thunderbolt.network 15-odimac-ethernet.network
   modules-load.conf mkinitcpio.conf logind.conf firewall.nft odimac-firewall.service odimac-doctor odimac-install)
@@ -27,10 +29,15 @@ sha256sums=($(printf 'SKIP %.0s' "${_files[@]}"))
 package() {
   install -Dm644 odimac.conf "$pkgdir/etc/odimac/odimac.conf"
   install -Dm644 common.sh "$pkgdir/usr/lib/odimac/common.sh"
-  install -Dm755 receiver-loop powerd mode wake-sources -t "$pkgdir/usr/lib/odimac"
+  install -Dm755 receiver-loop powerd mode wake-sources desktop-session -t "$pkgdir/usr/lib/odimac"
   install -Dm755 sleep-hook "$pkgdir/usr/lib/systemd/system-sleep/odimac-wake"
   install -Dm644 sway.conf "$pkgdir/usr/share/odimac/sway.conf"
-  install -Dm644 odimac-kiosk.service odimac-firewall.service -t "$pkgdir/usr/lib/systemd/system"
+  install -Dm644 hyprland.lua "$pkgdir/usr/share/odimac/hyprland.lua"
+  install -Dm644 shell.qml "$pkgdir/usr/share/odimac/quickshell/shell.qml"
+  install -Dm644 odimac-kiosk.service odimac-desktop.service odimac-firewall.service \
+    odimac-pacman-init.service -t "$pkgdir/usr/lib/systemd/system"
+  install -dm750 "$pkgdir/etc/sudoers.d"
+  install -m440 sudoers "$pkgdir/etc/sudoers.d/10-odimac"
   install -Dm644 firewall.nft "$pkgdir/usr/share/odimac/firewall.nft"
   install -Dm644 pam-odimac-kiosk "$pkgdir/etc/pam.d/odimac-kiosk"
   install -Dm644 sysusers.conf "$pkgdir/usr/lib/sysusers.d/odimac.conf"

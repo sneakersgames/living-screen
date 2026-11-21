@@ -1,13 +1,17 @@
 post_install() {
-  systemctl enable odimac-kiosk.service odimac-firewall.service systemd-networkd.service
+  systemctl enable odimac-kiosk.service odimac-firewall.service odimac-pacman-init.service systemd-networkd.service
   systemctl set-default graphical.target
 }
 pre_remove() {
-  systemctl disable odimac-kiosk.service odimac-firewall.service
+  systemctl disable odimac-kiosk.service odimac-firewall.service odimac-pacman-init.service
 }
 post_upgrade() {
   # 0.2.0 added the Thunderbolt-only firewall.
   if (( $(vercmp "$2" 0.2.0) < 0 )); then
     systemctl enable odimac-firewall.service
+  fi
+  # 0.5.0 added the desktop, which installs software with pacman.
+  if (( $(vercmp "$2" 0.5.0) < 0 )); then
+    systemctl enable odimac-pacman-init.service
   fi
 }

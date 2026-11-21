@@ -15,6 +15,10 @@ GAME_RESOLUTION="2560x1440"
 GAME_FPS=60
 GAME_MIN_SESSION=15
 MODE_IDLE_RETURN=600
+# Virtual terminals of the kiosk session and of the desktop, as in their
+# service files (tty2 is the console login).
+KIOSK_VT=1
+DESKTOP_VT=3
 ODIMAC_CONF="${ODIMAC_CONF:-/etc/odimac/odimac.conf}"
 # shellcheck disable=SC1090
 [[ -r "$ODIMAC_CONF" ]] && . "$ODIMAC_CONF"

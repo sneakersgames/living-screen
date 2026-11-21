@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs the kiosk's sway config and packages/odimac/mode in a headless sway,
-# with terminals standing in for Moonlight and the receiver. Needs sway,
-# foot and jq; no hardware or root:  tests/mode-test.sh
+# with terminals standing in for Moonlight and the receiver, and stubs for
+# the desktop's service and the virtual terminal switch. Needs sway, foot
+# and jq; no hardware or root:  tests/mode-test.sh
 set -u
 for c in sway swaymsg foot jq; do
   command -v "$c" >/dev/null || { echo "skipped: $c is not installed"; exit 0; }
@@ -23,13 +24,23 @@ cat > "$t/bin/od-receiver" <<S
 exec $foot --app-id od-receiver sleep 600
 S
 printf '#!/bin/sh\nshift 2\nexec "$@"\n' > "$t/bin/systemd-cat"
+cat > "$t/bin/systemctl" <<S
+#!/bin/sh
+echo "\$*" >> "$t/systemctl.log"
+[ ! -e "$t/desktop-fails" ]
+S
+cat > "$t/bin/busctl" <<S
+#!/bin/sh
+echo "\$*" >> "$t/busctl.log"
+S
+: > "$t/systemctl.log"; : > "$t/busctl.log"
 chmod +x "$t/bin/"*
 # The config as shipped, without the parts that need the real machine.
 sed -e "s|/usr/lib/odimac|$t/lib|g" -e '/powerd$/d' -e '/^include /d' \
   "$here/packages/odimac/sway.conf" > "$t/sway.conf"
 
 export PATH="$t/bin:$PATH" HOME="$t/home" XDG_RUNTIME_DIR="$t/run" XDG_CONFIG_HOME="$t/home/.config"
-export ODIMAC_CONF="$t/conf" ODIMAC_LIB="$t/lib" SWAYSOCK="$t/run/sway.sock"
+export ODIMAC_CONF="$t/conf" ODIMAC_LIB="$t/lib" SWAYSOCK="$t/run/sway-ipc.test.sock"
 export WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1
 unset WAYLAND_DISPLAY DISPLAY
 
@@ -87,6 +98,40 @@ bound shell
 check "the terminal opens on the shell workspace"  is where shell foot
 check "and is showing"                             is focused shell
 pkill -x foot
+check "and returns to display when it closes"      is focused display
+
+# The desktop is a session on another virtual terminal.
+vt() { [[ $(tail -n1 "$t/busctl.log") == *"SwitchTo u $1" ]]; }
+outside() { env -u SWAYSOCK "$t/lib/mode" "$@"; } # as from the desktop session
+bound desktop
+check "Ctrl+Alt+3's command starts the desktop"    grep -qx 'start odimac-desktop.service' "$t/systemctl.log"
+check "records the mode"                           is "mode status" desktop
+check "and switches to the desktop's terminal"     vt 3
+mode idle
+check "the kiosk being idle does not leave the desktop" is "mode status" desktop
+outside game
+check "gaming, asked for on the desktop, opens in the kiosk" is focused game
+check "which comes back to the front"              vt 1
+: > "$t/busctl.log"
+mode display
+[[ ! -s $t/busctl.log ]] && echo "ok   no terminal switch between the kiosk's own modes" \
+  || { echo "FAIL switched terminals without the desktop showing"; fail=1; }
+bound desktop
+check "back on the desktop"                        vt 3
+outside idle
+check "the desktop being idle returns to display"  is "mode status" display
+check "on the kiosk's terminal"                    vt 1
+bound desktop
+check "desktop again"                              is "mode status" desktop
+outside end desktop
+check "logging out of the desktop returns to display" is "mode status" display
+mode game; outside end desktop; sleep 1
+check "a desktop that ends in the background changes nothing" is "mode status" game
+mode display
+touch "$t/desktop-fails"
+bound desktop; sleep 1
+check "a desktop that does not start leaves display showing" is "mode status" display
+pkill -f -- '--app-id com.moonlight_stream.Moonlight'
 
 (( fail )) && { echo; tail -n 30 "$t/sway.log"; }
 exit "$fail"
