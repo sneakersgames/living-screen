@@ -2,10 +2,12 @@
 // the appliance's three environments, volume and clock. Run by hyprland.lua
 // as `qs -p /usr/share/odimac/quickshell` (this file is shell.qml there). It
 // is hidden on the Mac display and in gaming, which fill the screen.
+// On the Mac display it puts an invisible shield over the receiver instead.
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 import Quickshell.Services.Pipewire
 
 ShellRoot {
@@ -62,6 +64,39 @@ ShellRoot {
             hoverEnabled: true
             onClicked: pill.clicked()
             onWheel: wheel => pill.scrolled(wheel.angleDelta.y)
+        }
+    }
+
+    // On the Mac display, an invisible layer over the receiver's window that
+    // takes the iMac's own pointer. The receiver passes every pointer
+    // position it is given on to the Mac as a touch, and the Mac moves its
+    // pointer there: with the iMac's pointer resting on the receiver, the
+    // Mac's pointer kept jumping back to that spot.
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            required property var modelData
+            screen: modelData
+            visible: root.wsName === "display"
+            color: "transparent"
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "odimac-shield"
+
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.AllButtons
+                cursorShape: Qt.BlankCursor
+                onWheel: wheel => wheel.accepted = true
+            }
         }
     }
 

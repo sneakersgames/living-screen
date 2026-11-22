@@ -41,14 +41,16 @@ Runs on a real iMac18,3 from the live stick.
 | Panel at 5120x2880 (patched driver) | confirmed |
 | Thunderbolt link to an Apple silicon MacBook, connecting by itself on plug-in | confirmed |
 | Mac display, H.264 at 4096x2304 | confirmed, about 45 frames per second |
-| Mac display, HEVC at native 5120x2880 | **not tested on the iMac** |
 | Gaming, picture and input | confirmed with Apollo on the PC |
 | Brightness | confirmed |
 | Sound from the speakers | confirmed |
 | Desktop (Hyprland, the bar, Firefox, the file manager) | confirmed as a session of its own |
 | All three environments in one Hyprland session | confirmed (`odimac` 0.7.1) |
 | Switching between a running game and the desktop, which froze before the driver fix | confirmed with `odimac-amdgpu5k` release 2 |
-| Plugging the Thunderbolt cable in and out, and the console (Ctrl+Alt+F2), after the driver fix | **not tested on the iMac** |
+| Mac display, HEVC at native 5120x2880, in the Hyprland session | confirmed (`streamConfig hevc 5120x2880 @60`) |
+| Reconnecting after the Thunderbolt cable was pulled | worked once, failed once; not understood |
+| The pointer shield on the Mac display (`odimac` 0.7.2) | **not tested on the iMac** |
+| The console (Ctrl+Alt+F2) after the driver fix | **not tested on the iMac** |
 | Installer | **not tested on the iMac** |
 | Suspend | does not work, see "Known limits" |
 
@@ -350,7 +352,12 @@ temperatures, fan speed); `odimac-doctor load` shows the same live.
   own figure for HEVC at 5120x2880 is about 30.
 - **Connecting takes about 20 seconds after the cable is plugged in.** The
   Mac finds the iMac at once but its first few connection attempts time out.
-- **No audio, no keyboard or mouse forwarding** from the iMac to the Mac.
+- **No audio and no keyboard or mouse forwarding** from the iMac to the Mac.
+  The receiver would pass the iMac's pointer on to the Mac as touches, and
+  under Hyprland that made the Mac's pointer jump back to wherever the
+  iMac's pointer was resting. On the Mac display the bar's file
+  (`shell.qml`) therefore lays an invisible shield over the receiver that
+  takes the iMac's pointer; a mouse on the iMac does nothing there.
 - **The freezes (still picture, dead keyboard, then the whole machine)**
   were traced to one bug in the 5K driver patches: `kernel BUG at
   amdgpu_dm.c:13878`, in `dm_update_crtc_state`. It was hit by any request
