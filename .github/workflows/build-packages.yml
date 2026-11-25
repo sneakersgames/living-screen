@@ -1,0 +1,45 @@
+# Builds the packages on GitHub's x86_64 runners, for people without an
+# x86_64 Docker host (an Apple silicon Mac, for example).
+#   Actions -> Build packages -> Run workflow: they are attached to the run.
+#   Pushing a tag like v0.8.0 also publishes them as a release.
+# The two drivers are built for the kernel the chosen Omarchy channel has on
+# that day; they fit an iMac that is updated to the same kernel.
+name: Build packages
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Omarchy channel the iMac follows (stable, rc or edge)
+        default: stable
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Test
+        run: |
+          sudo apt-get install -y -qq lua5.4
+          tests/powerd-test.sh
+          tests/session-test.sh
+      - name: Build
+        env:
+          OMARCHY_CHANNEL: ${{ inputs.channel || 'stable' }}
+        run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: odimac-packages
+          path: out/*.pkg.tar.zst
+          retention-days: 14
+          compression-level: 0
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/*.pkg.tar.zst --generate-notes
