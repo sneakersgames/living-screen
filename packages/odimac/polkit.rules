@@ -1,8 +1,0 @@
-// The kiosk user may suspend the machine (odimac-powerd, SUSPEND_AFTER).
-polkit.addRule(function (action, subject) {
-  if (subject.user == "odimac" &&
-      (action.id == "org.freedesktop.login1.suspend" ||
-       action.id == "org.freedesktop.login1.suspend-multiple-sessions")) {
-    return polkit.Result.YES;
-  }
-});

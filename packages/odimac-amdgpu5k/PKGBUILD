@@ -1,22 +1,26 @@
 # The amdgpu module built by scripts/build-amdgpu5k.sh, for one exact kernel.
 # It goes into the kernel's updates/ directory, which takes precedence over
 # the stock module; removing this package brings the stock driver (4K) back.
-# build-inner.sh provides krel (the kernel release) and amdgpu.ko.zst.
+# It does not depend on that kernel's package: a kernel update must go
+# through, and the new kernel then runs its own stock driver until this is
+# built again for it. build-packages.sh provides krel (the kernel release
+# and its package) and amdgpu.ko.zst.
 source ./krel
 pkgname=odimac-amdgpu5k
 pkgver=${_krel//-/.}
-pkgrel=2
-pkgdesc="amdgpu with native 5120x2880 on the iMac 5K panel, for linux ${_krel}"
+pkgrel=1
+pkgdesc="amdgpu with native 5120x2880 on the iMac 5K panel, for ${_pkgbase} ${_krel}"
 arch=('x86_64')
 url="https://github.com/ahmadtv/omarchy-imac18-3"
 license=('GPL-2.0-only')
-depends=("linux=${_pkgver}")
-source=(amdgpu.ko.zst odimac-5k.conf)
-sha256sums=(SKIP SKIP)
+install=odimac-amdgpu5k.install
+source=(amdgpu.ko.zst odimac-5k.conf mkinitcpio.conf)
+sha256sums=(SKIP SKIP SKIP)
 noextract=(amdgpu.ko.zst)
 options=('!strip')
 
 package() {
   install -Dm644 amdgpu.ko.zst "$pkgdir/usr/lib/modules/${_krel}/updates/amdgpu.ko.zst"
   install -Dm644 odimac-5k.conf "$pkgdir/usr/lib/modprobe.d/odimac-5k.conf"
+  install -Dm644 mkinitcpio.conf "$pkgdir/etc/mkinitcpio.conf.d/odimac-5k.conf"
 }
