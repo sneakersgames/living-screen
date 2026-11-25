@@ -1,10 +1,11 @@
 #!/bin/bash
-# Runs od-receiver forever inside the display session.
+# Runs od-receiver for as long as the Omarchy session lasts
+# (odimac-receiver.service).
 . "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
 args=(--name "$RECEIVER_NAME" --device "$RECEIVER_DEVICE" --listen "0.0.0.0:$RECEIVER_PORT" --decoder "$RECEIVER_DECODER")
 [[ $RECEIVER_HEVC == 1 ]] || args+=(--no-hevc)
 read -ra extra <<<"$RECEIVER_EXTRA_ARGS"
-# Ends with the compositor, so a restarted session starts clean.
+# Ends with the compositor, so a new session starts clean.
 while session_running; do
   od-receiver "${args[@]}" "${extra[@]}" &
   # Its window belongs on the "display" workspace, full screen, whichever

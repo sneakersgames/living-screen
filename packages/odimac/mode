@@ -1,15 +1,16 @@
 #!/bin/bash
 # Switches what the panel shows, from a script or a terminal. The keys
-# (Ctrl+Alt+1, 2, 3) and the bar's buttons do the same.
+# (Ctrl+Alt+1, 2, 3) and the launcher's entries (Mac Display, Gaming) do the
+# same.
 #
 #   mode display   the OpenDisplay receiver (the default)
 #   mode game      Moonlight, streaming games from a PC; started on first use
-#   mode desktop   the desktop, on the workspace it was last on
+#   mode desktop   Omarchy's desktop, on the workspace it was last on
 #   mode status    prints the current mode
 #   mode watch     returns to "display" after MODE_IDLE_RETURN seconds without
-#                  input (started once by the session)
+#                  input (odimac-idle.service)
 #
-# All three are workspaces of the one Hyprland session; the switching itself
+# All three are workspaces of the Omarchy session; the switching itself
 # is in /usr/share/odimac/hyprland.lua (odimac.mode). The current mode is in
 # $XDG_RUNTIME_DIR/odimac-mode, which is how odimac-powerd knows to keep the
 # panel lit.
@@ -21,7 +22,7 @@ case ${1:-} in
     [[ $out == ok* ]] || { echo "$out" >&2; exit 1; }
     ;;
   status)
-    cat "${ODIMAC_RUN:-/run/user/$(id -u odimac 2>/dev/null || id -u)}/odimac-mode" 2>/dev/null || echo display
+    cat "$(run_dir)/odimac-mode" 2>/dev/null || echo display
     ;;
   watch)
     (( MODE_IDLE_RETURN > 0 )) || exit 0

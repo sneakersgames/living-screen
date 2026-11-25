@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Checks the session's configuration as far as that goes without a graphics
-# card: Hyprland parses its config (which also checks the arguments of every
-# dispatcher in it), and the Quickshell bar loads in a
-# headless sway. Needs Hyprland, quickshell and sway; skips itself without
-# them, and as root (Hyprland refuses to run):  tests/desktop-test.sh
+# Checks what this adds to Omarchy's session as far as that goes without a
+# graphics card and without Omarchy: Hyprland parses hyprland.lua by itself
+# (which also checks the arguments of every dispatcher in it), and Quickshell
+# loads the pointer shield in a headless sway. Needs Hyprland, quickshell and
+# sway; skips itself without them, and as root (Hyprland refuses to run):
+#   tests/desktop-test.sh
 set -u
 for c in Hyprland qs sway; do
   command -v "$c" >/dev/null || { echo "skipped: $c is not installed"; exit 0; }
@@ -32,12 +33,12 @@ for _ in $(seq 50); do
   [[ -n $WAYLAND_DISPLAY ]] && break; sleep 0.2
 done
 export WAYLAND_DISPLAY QT_QUICK_BACKEND=software
-qs -p "$here/packages/odimac/shell.qml" > "$t/qs.log" 2>&1 & qs=$!
+qs -p "$here/packages/odimac/shield.qml" > "$t/qs.log" 2>&1 & qs=$!
 for _ in $(seq 50); do grep -qE 'Configuration Loaded|ERROR.*(qml|shell)' "$t/qs.log" && break; sleep 0.2; done
-# Without Hyprland and PipeWire running, those two say so; anything else is ours.
-if grep -q 'Configuration Loaded' "$t/qs.log" && ! grep -E 'shell\.qml|ReferenceError|TypeError' "$t/qs.log" | grep -v 'Launching config'; then
-  echo "ok   Quickshell loads the bar"
+# Without Hyprland running, Quickshell says so; anything else is ours.
+if grep -q 'Configuration Loaded' "$t/qs.log" && ! grep -E 'shield\.qml|ReferenceError|TypeError' "$t/qs.log" | grep -v 'Launching config'; then
+  echo "ok   Quickshell loads the pointer shield"
 else
-  echo "FAIL Quickshell does not load the bar"; cat "$t/qs.log"; fail=1
+  echo "FAIL Quickshell does not load the pointer shield"; cat "$t/qs.log"; fail=1
 fi
 exit "$fail"

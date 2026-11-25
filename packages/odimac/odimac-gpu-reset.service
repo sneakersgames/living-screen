@@ -1,5 +1,5 @@
 [Unit]
-Description=Bring the display session back after a graphics card reset
+Description=Bring the session back after a graphics card reset
 
 [Service]
 Type=oneshot

@@ -20,20 +20,48 @@ ODIMAC_CONF="${ODIMAC_CONF:-/etc/odimac/odimac.conf}"
 [[ -r "$ODIMAC_CONF" ]] && . "$ODIMAC_CONF"
 : "${RECEIVER_NAME:=$(cat /proc/sys/kernel/hostname 2>/dev/null || echo iMac)}"
 
-# --- the display session (Hyprland) -----------------------------------------
-# hypr ARGS: hyprctl against the appliance's session, from inside it or, as
-# root or the kiosk user, from a console.
+# --- the session (Omarchy's Hyprland) ---------------------------------------
+# The running Hyprland instance, for callers outside it (a console, ssh,
+# root): sets SESSION_UID and SESSION_SIG. Fails when there is none.
+find_session() {
+  local sock dir
+  # shellcheck disable=SC2012
+  sock=$(ls -t /run/user/*/hypr/*/.socket.sock 2>/dev/null | head -n1)
+  [[ -n $sock ]] || return 1
+  dir=${sock%/.socket.sock}
+  SESSION_SIG=${dir##*/}
+  dir=${dir#/run/user/}
+  SESSION_UID=${dir%%/*}
+}
+# as_session CMD...: run a command as the session's user, in its runtime
+# directory. For root and for that user.
+as_session() {
+  find_session || return 1
+  if (( EUID == SESSION_UID )); then
+    XDG_RUNTIME_DIR="/run/user/$SESSION_UID" HYPRLAND_INSTANCE_SIGNATURE="$SESSION_SIG" "$@"
+  else
+    runuser -u "$(id -nu "$SESSION_UID")" -- env XDG_RUNTIME_DIR="/run/user/$SESSION_UID" \
+      HYPRLAND_INSTANCE_SIGNATURE="$SESSION_SIG" "$@"
+  fi
+}
+# hypr ARGS: hyprctl against the session, from inside it or from outside.
 hypr() {
   if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
     hyprctl "$@"
-    return
-  fi
-  local uid
-  uid=$(id -u odimac 2>/dev/null) || return 1
-  if (( EUID == uid )); then
-    XDG_RUNTIME_DIR="/run/user/$uid" hyprctl -i 0 "$@"
   else
-    runuser -u odimac -- env XDG_RUNTIME_DIR="/run/user/$uid" hyprctl -i 0 "$@"
+    as_session hyprctl "$@"
+  fi
+}
+# Where the session's Lua (hyprland.lua) keeps the mode and its other notes.
+run_dir() {
+  if [[ -n ${ODIMAC_RUN:-} ]]; then
+    echo "$ODIMAC_RUN"
+  elif [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} && -n ${XDG_RUNTIME_DIR:-} ]]; then
+    echo "$XDG_RUNTIME_DIR"
+  elif find_session; then
+    echo "/run/user/$SESSION_UID"
+  else
+    echo "${XDG_RUNTIME_DIR:-/tmp}"
   fi
 }
 # True while the session this script was started by is still there.

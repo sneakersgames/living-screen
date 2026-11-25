@@ -1,10 +1,15 @@
 #!/usr/bin/nft -f
-# The receiver is only reachable over the Thunderbolt cable. Without this, a
-# Mac on the same network as the iMac's Ethernet port finds and uses it over
-# Wi-Fi instead. Ethernet stays usable for maintenance (ssh, pacman) and for
-# Moonlight, which connects out to the PC. Blocking mDNS (5353) also keeps
-# Moonlight from finding the PC by itself: add it there by address.
-# Turn off with:  systemctl disable --now odimac-firewall
+# The receiver is only reachable, and only visible, over the Thunderbolt
+# cable. Without this, a Mac on the same network as the iMac's Ethernet or
+# Wi-Fi finds it there and tries to use it over Wi-Fi instead.
+#
+# Omarchy's own firewall (ufw) already refuses the receiver's ports from
+# those networks; this table says so again, should ufw be off, and adds what
+# ufw leaves open: mDNS (5353), by which the receiver announces itself. That
+# has a price on the desktop: nothing on this machine finds things by name
+# on the local network any more (printers, .local names, Moonlight finding
+# the PC by itself: add the PC there by address).
+# Turn off with:  sudo systemctl disable --now odimac-firewall
 table inet odimac
 delete table inet odimac
 table inet odimac {

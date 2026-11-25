@@ -1,8 +1,8 @@
 #!/bin/bash
 # Gaming mode's program: Moonlight, streaming from a PC that runs Sunshine or
-# Apollo. Started by the session the first time the mode is chosen
-# (odimac.mode in hyprland.lua); when Moonlight is quit, the session returns
-# to the Mac's display.
+# Apollo. Started by the session the first time the mode is chosen, and again
+# after Moonlight was quit (odimac.mode in hyprland.lua); when Moonlight is
+# quit, the session returns to the Mac's display.
 . "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
 trap 'hypr eval "odimac.ended(\"game\")" >/dev/null' EXIT
 

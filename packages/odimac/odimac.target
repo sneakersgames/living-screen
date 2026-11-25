@@ -1,0 +1,5 @@
+[Unit]
+Description=OpenDisplay iMac: Mac display and gaming in the Omarchy session
+# Started by /usr/share/odimac/hyprland.lua when Hyprland starts.
+PartOf=graphical-session.target
+Wants=odimac-receiver.service odimac-powerd.service odimac-idle.service odimac-shield.service

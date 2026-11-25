@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exercises packages/odimac/powerd against a fake sysfs and stubbed
-# hyprctl/ss/systemctl. No hardware or root needed:  tests/powerd-test.sh
+# hyprctl/ss/systemctl (needs jq, as powerd does). No hardware or root needed:  tests/powerd-test.sh
 set -u
 here=$(cd "$(dirname "$0")/.." && pwd)
 t=$(mktemp -d); trap 'kill "$pid" 2>/dev/null; rm -rf "$t"' EXIT
@@ -9,6 +9,8 @@ cp "$here/packages/odimac/common.sh" "$t/lib/"
 printf 'PANEL_OFF_DELAY=3\nSUSPEND_AFTER=6\n' > "$t/conf"
 cat > "$t/bin/hyprctl" <<S
 #!/bin/sh
+# "monitors -j" is how powerd asks whether the panel is lit.
+if [ "\$1" = monitors ]; then cat "$t/monitors" 2>/dev/null || echo ok; exit 0; fi
 echo "\$*" >> "$t/panel.log"
 echo ok
 S
@@ -45,9 +47,21 @@ else echo "FAIL no load line during the session"; fail=1; fi
 rm "$t/session"
 sleep 1.5; expect "still lit just after the session ends" on
 sleep 3;   expect "dark after the session ended" off
+offs=$(grep -c '"off"' "$t/panel.log")
+echo '[{"dpmsStatus":true}]' > "$t/monitors"
+sleep 6.5
+if grep -q 'panel lit by a key' "$t/powerd.log"; then echo "ok   notices a key press lighting the dark panel"
+else echo "FAIL did not notice the panel being lit"; fail=1; fi
+rm "$t/monitors"
+sleep 4
+if (( $(grep -c '"off"' "$t/panel.log") > offs )); then echo "ok   and darkens it again after the idle delay"
+else echo "FAIL the panel lit by a key press was left on"; fail=1; fi
+ons=$(grep -c '"on"' "$t/panel.log")
 echo game > "$t/run/odimac-mode"
 sleep 1;   expect "lit in gaming mode" on
-sleep 3.5; expect "stays lit in gaming mode, past the idle delay" on
+sleep 3.5; expect "left alone in gaming mode, past the idle delay" on
+if (( $(grep -c '"on"' "$t/panel.log") == ons + 1 )); then echo "ok   lit once on the way in, then Omarchy's"
+else echo "FAIL lit more than once in gaming mode"; fail=1; fi
 echo display > "$t/run/odimac-mode"
 sleep 1.5; expect "still lit just after returning to display mode" on
 sleep 3;   expect "dark once display mode is idle again" off

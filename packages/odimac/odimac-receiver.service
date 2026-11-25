@@ -1,0 +1,10 @@
+[Unit]
+Description=OpenDisplay receiver (the Mac display)
+PartOf=odimac.target
+After=odimac.target
+
+[Service]
+ExecStart=/usr/lib/odimac/receiver-loop
+SyslogIdentifier=odimac-receiver
+Restart=on-failure
+RestartSec=2

@@ -1,33 +1,33 @@
-# The appliance layer: kiosk session, power policy, network setup, installer.
+# OpenDisplay iMac for Omarchy: the Mac display and gaming beside Omarchy's
+# desktop. Installing it changes nothing by itself; `odimac-setup` turns it on.
 pkgname=odimac
-pkgver=0.7.2
+pkgver=0.8.0
 pkgrel=1
-pkgdesc="Turns an Intel iMac into an OpenDisplay screen that can also stream games from a PC and be a desktop"
+pkgdesc="Makes an Intel iMac running Omarchy an OpenDisplay screen for a Mac and a Moonlight screen for a PC"
 arch=('any')
 url="https://github.com/peetzweg/opendisplay"
 license=('GPL-3.0-only')
+# Hyprland, Quickshell, PipeWire, NetworkManager, ufw and the desktop's
+# programs are Omarchy's own; what is listed here is what this adds, and what
+# its scripts call.
 depends=(
-  'opendisplay-receiver'
-  'hyprland' 'quickshell' 'swayidle' 'polkit' 'nftables'
-  'moonlight-qt' 'qt6-wayland'                       # gaming
-  'pipewire' 'pipewire-pulse' 'wireplumber'          # audio for Moonlight and the desktop
-  'foot' 'fuzzel' 'sudo' 'ttf-dejavu'                # the desktop
-  'firefox' 'nautilus' 'gvfs' 'ffmpegthumbnailer' 'xdg-user-dirs'
-  'xdg-desktop-portal-hyprland' 'xdg-desktop-portal-gtk' 'hyprpolkitagent' 'mako'
-  'noto-fonts' 'noto-fonts-emoji'
-  'mesa' 'gst-plugin-va' 'libva-utils' 'gstreamer' 'ffmpeg'
+  'opendisplay-receiver' 'gst-libav' 'gst-plugin-va' 'libva-utils' 'ffmpeg'
+  'moonlight-qt'                                     # gaming
+  'hyprland' 'quickshell' 'swayidle' 'nftables' 'jq'
   'brightnessctl' 'iproute2' 'util-linux' 'systemd'
-  'dosfstools' 'e2fsprogs' 'arch-install-scripts'   # odimac-install
+)
+optdepends=(
+  'odimac-amdgpu5k: the 5K panel at 5120x2880'
+  'odimac-cs8409: sound from the iMac18,3 speakers'
 )
 backup=('etc/odimac/odimac.conf')
 install=odimac.install
 _files=(odimac.conf common.sh receiver-loop powerd mode wake-sources sleep-hook
   gpu-reset 90-odimac-gpu-reset.rules odimac-gpu-reset.service
-  sysctl.conf
-  game hyprland.lua shell.qml sudoers odimac-pacman-init.service
-  odimac-kiosk.service pam-odimac-kiosk sysusers.conf tmpfiles.conf
-  polkit.rules 10-odimac-thunderbolt.network 15-odimac-ethernet.network
-  modules-load.conf mkinitcpio.conf logind.conf firewall.nft odimac-firewall.service odimac-doctor odimac-install)
+  sysctl.conf game hyprland.lua shield.qml
+  odimac.target odimac-receiver.service odimac-powerd.service odimac-idle.service odimac-shield.service
+  thunderbolt.nmconnection odimac-display.desktop odimac-game.desktop
+  modules-load.conf firewall.nft odimac-firewall.service odimac-doctor odimac-setup)
 source=("${_files[@]}")
 sha256sums=($(printf 'SKIP %.0s' "${_files[@]}"))
 
@@ -38,21 +38,17 @@ package() {
   install -Dm644 90-odimac-gpu-reset.rules -t "$pkgdir/usr/lib/udev/rules.d"
   install -Dm755 sleep-hook "$pkgdir/usr/lib/systemd/system-sleep/odimac-wake"
   install -Dm644 hyprland.lua "$pkgdir/usr/share/odimac/hyprland.lua"
-  install -Dm644 shell.qml "$pkgdir/usr/share/odimac/quickshell/shell.qml"
-  install -Dm644 odimac-kiosk.service odimac-firewall.service \
-    odimac-pacman-init.service odimac-gpu-reset.service -t "$pkgdir/usr/lib/systemd/system"
-  install -dm750 "$pkgdir/etc/sudoers.d"
-  install -m440 sudoers "$pkgdir/etc/sudoers.d/10-odimac"
+  install -Dm644 shield.qml "$pkgdir/usr/share/odimac/quickshell/shell.qml"
+  install -Dm644 odimac-firewall.service odimac-gpu-reset.service -t "$pkgdir/usr/lib/systemd/system"
+  install -Dm644 odimac.target odimac-receiver.service odimac-powerd.service \
+    odimac-idle.service odimac-shield.service -t "$pkgdir/usr/lib/systemd/user"
   install -Dm644 firewall.nft "$pkgdir/usr/share/odimac/firewall.nft"
-  install -Dm644 pam-odimac-kiosk "$pkgdir/etc/pam.d/odimac-kiosk"
-  install -Dm644 sysusers.conf "$pkgdir/usr/lib/sysusers.d/odimac.conf"
-  install -Dm644 tmpfiles.conf "$pkgdir/usr/lib/tmpfiles.d/odimac.conf"
+  # NetworkManager ignores a profile that others can read.
+  install -dm755 "$pkgdir/usr/lib/NetworkManager/system-connections"
+  install -m600 thunderbolt.nmconnection \
+    "$pkgdir/usr/lib/NetworkManager/system-connections/odimac-thunderbolt.nmconnection"
+  install -Dm644 odimac-display.desktop odimac-game.desktop -t "$pkgdir/usr/share/applications"
   install -Dm644 sysctl.conf "$pkgdir/usr/lib/sysctl.d/50-odimac.conf"
-  install -Dm644 polkit.rules "$pkgdir/usr/share/polkit-1/rules.d/50-odimac.rules"
-  install -Dm644 10-odimac-thunderbolt.network 15-odimac-ethernet.network \
-    -t "$pkgdir/usr/lib/systemd/network"
   install -Dm644 modules-load.conf "$pkgdir/usr/lib/modules-load.d/odimac.conf"
-  install -Dm644 logind.conf "$pkgdir/usr/lib/systemd/logind.conf.d/odimac.conf"
-  install -Dm644 mkinitcpio.conf "$pkgdir/etc/mkinitcpio.conf.d/odimac.conf"
-  install -Dm755 odimac-doctor odimac-install -t "$pkgdir/usr/bin"
+  install -Dm755 odimac-doctor odimac-setup -t "$pkgdir/usr/bin"
 }

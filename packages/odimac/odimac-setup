@@ -1,0 +1,106 @@
+#!/bin/bash
+# Turns the OpenDisplay iMac features on for your Omarchy session, or off
+# again. Run as yourself, in a terminal; it asks for your password (sudo) for
+# the two system settings.
+#
+#   odimac-setup               set up: safe to run again
+#   odimac-setup --autologin   also log in without a password at power-on
+#   odimac-setup remove        undo all of it (the packages stay installed)
+#
+# What it changes:
+#   ~/.config/hypr/hyprland.lua   one line that loads /usr/share/odimac/hyprland.lua
+#   Omarchy's firewall (ufw)      lets the Thunderbolt cable in
+#   odimac-firewall.service       keeps the receiver off every other network
+#   /etc/sddm.conf.d/odimac-autologin.conf   with --autologin
+set -euo pipefail
+HOOK=${ODIMAC_SHARE:-/usr/share/odimac}/hyprland.lua
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua"
+AUTOLOGIN=/etc/sddm.conf.d/odimac-autologin.conf
+# The iMac18,3 has two Thunderbolt ports; the kernel numbers the cables.
+CABLES=(thunderbolt0 thunderbolt1)
+
+die() { echo "odimac-setup: $*" >&2; exit 1; }
+say() { echo "==> $*"; }
+
+action=setup autologin=0
+for arg in "$@"; do
+  case $arg in
+    remove) action=remove ;;
+    --autologin) autologin=1 ;;
+    *) sed -n '2,13s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  esac
+done
+(( EUID )) || die "run this as yourself, not as root: it changes your own Hyprland configuration"
+
+in_session() { [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; }
+
+unhook() {
+  [[ -e $CONFIG ]] || return 0
+  # Through a copy, so a symlinked configuration (dotfiles) stays a symlink.
+  local kept
+  kept=$(grep -v -F -e "$HOOK" -e '-- OpenDisplay iMac (odimac-setup)' "$CONFIG" || true)
+  printf '%s\n' "$kept" > "$CONFIG"
+}
+
+if [[ $action == remove ]]; then
+  say "taking the line out of $CONFIG"
+  unhook
+  systemctl --user stop odimac.target 2>/dev/null || true
+  say "system settings (sudo)"
+  for c in "${CABLES[@]}"; do
+    sudo ufw delete allow in on "$c" >/dev/null 2>&1 || true
+  done
+  sudo systemctl disable --now odimac-firewall.service 2>/dev/null || true
+  sudo rm -f "$AUTOLOGIN"
+  in_session && hyprctl reload >/dev/null
+  echo "Done. The Mac display's and Moonlight's windows, if open, are ordinary windows now."
+  exit 0
+fi
+
+[[ -e $HOOK ]] || die "$HOOK is missing: install the odimac package first"
+[[ -e $CONFIG ]] || die "$CONFIG not found. This needs Omarchy 4 or later, whose Hyprland is configured in Lua."
+
+if grep -q -F "$HOOK" "$CONFIG"; then
+  say "$CONFIG already loads the OpenDisplay iMac configuration"
+else
+  say "adding one line to $CONFIG"
+  cat >> "$CONFIG" <<EOF
+
+-- OpenDisplay iMac (odimac-setup): the Mac display on Ctrl+Alt+1, gaming on Ctrl+Alt+2. \`odimac-setup remove\` takes this out.
+do local ok, err = pcall(dofile, "$HOOK"); if not ok then print("odimac: " .. tostring(err)) end end
+EOF
+fi
+
+say "system settings (sudo)"
+if command -v ufw >/dev/null; then
+  for c in "${CABLES[@]}"; do
+    sudo ufw allow in on "$c" comment 'OpenDisplay cable' >/dev/null
+  done
+  echo "    Omarchy's firewall lets the Thunderbolt cable in"
+else
+  echo "    no ufw here: nothing to open"
+fi
+sudo systemctl enable --now odimac-firewall.service
+echo "    the receiver is reachable over the Thunderbolt cable only (odimac-firewall.service)"
+sudo nmcli connection reload 2>/dev/null || true
+if (( autologin )); then
+  # Omarchy's own name for its session, as its installer writes it.
+  printf '# Written by odimac-setup --autologin; odimac-setup remove deletes it.\n[Autologin]\nUser=%s\nSession=omarchy.desktop\n' \
+    "$USER" | sudo tee "$AUTOLOGIN" >/dev/null
+  echo "    $USER is logged in without a password at power-on ($AUTOLOGIN)"
+fi
+
+if in_session; then
+  hyprctl reload >/dev/null
+  systemctl --user daemon-reload
+  systemctl --user restart odimac.target
+  cat <<'MSG'
+
+Running. Ctrl+Alt+1 is the Mac display, Ctrl+Alt+2 gaming, Ctrl+Alt+3 the
+desktop. From the next login on, the session starts on the Mac display.
+`odimac-doctor` reports on all of it.
+MSG
+else
+  echo
+  echo "Done. Log in to Omarchy (or log out and in again) to start it."
+fi

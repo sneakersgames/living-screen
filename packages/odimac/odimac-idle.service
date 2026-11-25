@@ -1,0 +1,10 @@
+[Unit]
+Description=Return to the Mac display after a time without input
+PartOf=odimac.target
+After=odimac.target
+
+[Service]
+ExecStart=/usr/lib/odimac/mode watch
+SyslogIdentifier=odimac-mode
+Restart=on-failure
+RestartSec=2

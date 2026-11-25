@@ -1,5 +1,5 @@
 #!/bin/bash
-# Diagnostics for the OpenDisplay iMac appliance.
+# Diagnostics for OpenDisplay iMac on Omarchy.
 #   odimac-doctor                 report on panel, decoding, Thunderbolt, receiver
 #   odimac-doctor suspend-test    check that suspend works and what wakes it
 #   odimac-doctor decode-bench    measure how fast this machine decodes a 4K stream
@@ -13,8 +13,28 @@ have() { command -v "$1" >/dev/null 2>&1; }
 report() {
   h "Machine"
   echo "model:   $(cat /sys/class/dmi/id/product_name 2>/dev/null)  (iMac18,3 is the 2017 27\" 5K)"
-  echo "kernel:  $(uname -r)"
-  echo "appliance: $(pacman -Q odimac opendisplay-receiver 2>/dev/null | tr '\n' ' ')"
+  krel=$(uname -r)
+  echo "kernel:  $krel ($(cat "/usr/lib/modules/$krel/pkgbase" 2>/dev/null || echo unknown package))"
+  echo "Omarchy: $(omarchy-version 2>/dev/null || cat "${OMARCHY_PATH:-/usr/share/omarchy}/version" 2>/dev/null || echo "NOT found: this is made for Omarchy")"
+  echo "packages: $(pacman -Q odimac opendisplay-receiver odimac-amdgpu5k odimac-cs8409 2>/dev/null | tr '\n' ' ')"
+
+  h "Session"
+  if find_session; then
+    user=$(id -nu "$SESSION_UID")
+    echo "Hyprland: running for $user"
+    cfg=$(getent passwd "$user" | cut -d: -f6)/.config/hypr/hyprland.lua
+    if grep -q -F /usr/share/odimac/hyprland.lua "$cfg" 2>/dev/null; then
+      echo "set up: yes ($cfg loads it)"
+    else
+      echo "set up: NO: run odimac-setup as $user"
+    fi
+    for u in receiver powerd idle shield; do
+      printf '%-9s %s\n' "$u:" "$(as_session systemctl --user is-active "odimac-$u.service" 2>/dev/null)"
+    done
+    echo "mode: $(/usr/lib/odimac/mode status)  (Ctrl+Alt+1 Mac display, +2 gaming, +3 desktop)"
+  else
+    echo "Hyprland: NOT running (nobody is logged in to Omarchy)"
+  fi
 
   h "Panel"
   for c in /sys/class/drm/card*-*; do
@@ -26,16 +46,21 @@ report() {
   stitch=$(cat /sys/module/amdgpu/parameters/tiled_stitch 2>/dev/null)
   case $stitch in
     1) echo "5K driver: active (expect 5120x2880 above)" ;;
-    "") echo "5K driver: not installed, stock amdgpu (expect 3840x2160 above)" ;;
+    "")
+      echo "5K driver: not running, stock amdgpu (expect 3840x2160 above)"
+      for d in /usr/lib/modules/*/updates/amdgpu.ko.zst; do
+        [[ -e $d ]] || continue
+        d=${d#/usr/lib/modules/}
+        echo "  odimac-amdgpu5k is installed for kernel ${d%%/*}, not for the running $krel:"
+        echo "  the kernel was updated since. Build and install the drivers again (README, \"After an Omarchy update\")."
+      done
+      ;;
     *) echo "5K driver: installed but tiled_stitch=$stitch" ;;
   esac
   if mons=$(hypr monitors 2>/dev/null) && [[ $mons == Monitor* ]]; then
     sed -n '1,2p' <<<"$mons" | sed 's/^\s*//'
     grep -m1 -E '^\s*dpmsStatus' <<<"$mons" | sed 's/^\s*dpmsStatus: 1/panel: on/; s/^\s*dpmsStatus: 0/panel: off (idle)/'
-  else
-    echo "display session: NOT running (journalctl -b -u odimac-kiosk)"
   fi
-  echo "mode: $(/usr/lib/odimac/mode status)  (Ctrl+Alt+1 Mac display, +2 gaming, +3 desktop)"
   bl=$(ls /sys/class/backlight 2>/dev/null | tr '\n' ' ')
   echo "backlight control: ${bl:-none (BRIGHTNESS has no effect)}"
 
@@ -61,13 +86,13 @@ report() {
   else
     echo "iMac sound driver: NOT installed (no speakers; USB audio works)"
   fi
-  if uid=$(id -u odimac 2>/dev/null) && [[ -S /run/user/$uid/pipewire-0 ]]; then
-    sinks=$(runuser -u odimac -- env XDG_RUNTIME_DIR="/run/user/$uid" wpctl status 2>&1 |
+  if find_session && [[ -S /run/user/$SESSION_UID/pipewire-0 ]]; then
+    sinks=$(as_session wpctl status 2>&1 |
       sed -n '/^Audio/,/^Video/p' | sed -n '/Sinks:/,/Sources:/p' | grep '[0-9]\. ' | cut -c1-100)
     echo "outputs (* is the one in use):"
     echo "${sinks:-  none: PipeWire sees no sound card}"
   else
-    echo "PipeWire: NOT running for the display session (as user odimac: systemctl --user status pipewire.socket)"
+    echo "PipeWire: not running (nobody is logged in?)"
   fi
 
   h "Trouble"
@@ -85,7 +110,7 @@ report() {
     if zstdcat "$drv" 2>/dev/null | grep -qa 'logical modeset of live root'; then
       echo "5K driver: has the fix for that crash"
     else
-      echo "5K driver: WITHOUT the fix for that crash (update odimac-amdgpu5k, then mkinitcpio -P)"
+      echo "5K driver: WITHOUT the fix for that crash (build and install odimac-amdgpu5k again)"
     fi
   fi
 
@@ -115,11 +140,23 @@ report() {
   (( found )) || echo "no cable link: no computer on the Thunderbolt port (or it is asleep)"
 
   h "Receiver"
-  if nft list table inet odimac >/dev/null 2>&1; then
-    echo "reachable: over the Thunderbolt cable only"
+  if systemctl is-active --quiet odimac-firewall.service; then
+    echo "visible and reachable: over the Thunderbolt cable only (odimac-firewall)"
   else
-    echo "reachable: over every network interface (odimac-firewall is off)"
+    echo "odimac-firewall: off (the receiver announces itself on every network)"
   fi
+  if command -v ufw >/dev/null; then
+    if (( EUID == 0 )); then
+      if ufw status 2>/dev/null | grep -q thunderbolt; then
+        echo "Omarchy's firewall (ufw): lets the Thunderbolt cable in"
+      else
+        echo "Omarchy's firewall (ufw): does NOT let the Thunderbolt cable in: run odimac-setup"
+      fi
+    else
+      echo "Omarchy's firewall (ufw): run odimac-doctor with sudo to have it checked"
+    fi
+  fi
+  nmcli -t -f DEVICE,STATE,CONNECTION device 2>/dev/null | grep '^thunderbolt' | sed 's/^/NetworkManager: /'
   if ss -Hltn "( sport = :$RECEIVER_PORT )" | grep -q .; then
     echo "listening on port $RECEIVER_PORT as \"$RECEIVER_NAME\""
   else
@@ -168,7 +205,7 @@ MSG
   cat <<'MSG'
 
 If the cable woke it (not the power button): set SUSPEND_AFTER (for example
-600) in /etc/odimac/odimac.conf and `systemctl restart odimac-kiosk`.
+600) in /etc/odimac/odimac.conf and `systemctl --user restart odimac-powerd`.
 MSG
 }
 
@@ -228,7 +265,7 @@ case ${1:-} in
   last-start)
     # What the machine wrote last before it went down, or stopped responding.
     journalctl -b -1 -n "${2:-45}" --no-pager -o short 2>/dev/null | cut -c8-170 ||
-      echo "no log of an earlier start (the live stick keeps none)"
+      echo "no log of an earlier start"
     ;;
   *) sed -n '2,7s/^# //p' "$0"; exit 1 ;;
 esac

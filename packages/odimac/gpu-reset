@@ -1,8 +1,13 @@
 #!/bin/bash
 # Run once per graphics card reset (90-odimac-gpu-reset.rules): the session
-# that was running cannot draw any more, so start it afresh. Open programs
-# are closed by that; there is no saving them. After
+# that was running cannot draw any more, so the login manager starts it
+# afresh (Omarchy logs in again by itself where it is set up to). Open
+# programs are closed by that; there is no saving them. After
 # https://github.com/ahmadtv/omarchy-imac18-3.
-echo "graphics card was reset: restarting the display session" | systemd-cat -t odimac-powerd -p warning
+if ! systemctl is-active --quiet sddm.service; then
+  echo "graphics card was reset: no login manager running, nothing to restart" | systemd-cat -t odimac-powerd
+  exit 0
+fi
+echo "graphics card was reset: restarting the session" | systemd-cat -t odimac-powerd -p warning
 sleep 2 # let the driver finish first
-systemctl restart odimac-kiosk.service
+systemctl restart sddm.service

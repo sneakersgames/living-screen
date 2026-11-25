@@ -1,10 +1,13 @@
 #!/bin/bash
-# Panel and suspend policy for the display session. Runs inside Hyprland.
+# Panel and suspend policy for the Mac display. Runs in the Omarchy session
+# (odimac-powerd.service).
 #
 #   panel on   while a sender is connected, and for PANEL_OFF_DELAY seconds
-#              after boot, resume, a cable plug-in or the end of a session;
-#              and for as long as gaming or the desktop is showing
+#              after boot, resume, a cable plug-in or the end of a session
 #   panel off  otherwise (display power off: backlight dark, machine idle)
+#   hands off  for as long as gaming or the desktop is showing: the panel is
+#              lit on the way there, and from then on Omarchy's own idle
+#              handling (screensaver, lock) has it
 #   suspend    optional, only with no cable, no session and the display
 #              mode showing (SUSPEND_AFTER)
 #
@@ -15,7 +18,7 @@
 . "${ODIMAC_LIB:-/usr/lib/odimac}/common.sh"
 SYSFS="${ODIMAC_SYSFS:-/sys}"
 POLL="${ODIMAC_POLL:-1}"
-MODE_FILE="${ODIMAC_RUN:-${XDG_RUNTIME_DIR:-/tmp}}/odimac-mode"
+MODE_FILE="$(run_dir)/odimac-mode"
 
 log() { echo "$*" >&2; }
 
@@ -36,6 +39,10 @@ session_active() {
 current_mode() { cat "$MODE_FILE" 2>/dev/null || echo display; }
 
 panel_power() { [[ $(hypr eval "odimac.panel(\"$1\")" 2>/dev/null) == ok* ]]; }
+# Whether the panel is lit, as Hyprland has it: 0 lit, 1 dark, 2 not known.
+panel_lit() {
+  hypr monitors -j 2>/dev/null | jq -e 'any(.[]; .dpmsStatus)' >/dev/null 2>&1
+}
 panel=unknown
 set_panel() {
   [[ $panel == "$1" ]] && return
@@ -63,7 +70,9 @@ alone_since=$now
 had_cable=0
 had_session=0
 had_mode=display
+panel_mode=display
 load_logged=0
+lit_checked=0
 LOAD_LOG_INTERVAL=${ODIMAC_LOAD_INTERVAL:-60}
 log "started (panel off after ${PANEL_OFF_DELAY}s idle, suspend after ${SUSPEND_AFTER}s)"
 
@@ -116,14 +125,37 @@ while session_running; do
     load_logged=0
   fi
 
+  # Omarchy lights a dark panel on a key press or a mouse movement. On the
+  # Mac display that is somebody at the iMac: wait for a sender again.
+  if [[ $mode == display && $panel == off ]] && (( now - lit_checked >= 5 )); then
+    lit_checked=$now
+    if panel_lit; then
+      log "panel lit by a key or the mouse"
+      panel=on
+      lit_until=$((now + PANEL_OFF_DELAY))
+    fi
+  fi
+
   if [[ $mode != display ]]; then
-    set_panel on "$mode mode"
-  elif (( session )); then
-    set_panel on "sender connected"
-  elif (( now < lit_until )); then
-    set_panel on "waiting for a sender"
+    # Once, on the way in: after that the panel is Omarchy's.
+    if [[ $panel_mode != "$mode" ]]; then
+      panel=unknown
+      set_panel on "$mode mode"
+      [[ $panel == on ]] && panel_mode=$mode
+    fi
   else
-    set_panel off "idle"
+    # Back from there, the panel may be in either state.
+    if [[ $panel_mode != display ]]; then
+      panel=unknown
+      panel_mode=display
+    fi
+    if (( session )); then
+      set_panel on "sender connected"
+    elif (( now < lit_until )); then
+      set_panel on "waiting for a sender"
+    else
+      set_panel off "idle"
+    fi
   fi
 
   if (( cable || session )) || [[ $mode != display ]]; then

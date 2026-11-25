@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Gaming
+Comment=Stream games from the PC (Moonlight)
+Exec=/usr/lib/odimac/mode game
+Icon=input-gaming
+Categories=Utility;

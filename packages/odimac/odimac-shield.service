@@ -1,0 +1,11 @@
+[Unit]
+Description=Keeps the iMac's pointer off the Mac display
+PartOf=odimac.target
+After=odimac.target
+
+[Service]
+ExecStart=/usr/bin/quickshell -p /usr/share/odimac/quickshell
+SyslogIdentifier=odimac-shield
+Restart=on-failure
+RestartSec=2
+Environment=QS_NO_RELOAD_POPUP=1 QS_DISABLE_CRASH_HANDLER=1

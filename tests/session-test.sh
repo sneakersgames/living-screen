@@ -18,6 +18,7 @@ check() { # description, command...
 lua=$(command -v lua || command -v lua5.4 || true)
 if [[ -n $lua ]]; then
   ODIMAC_RUN="$t/run" HOME="$t/home" "$lua" "$here/tests/session-test.lua" "$here/packages/odimac/hyprland.lua" || fail=1
+  rm -f "$t/run"/odimac-*
 else
   echo "skipped: the config's logic (lua is not installed)"
 fi

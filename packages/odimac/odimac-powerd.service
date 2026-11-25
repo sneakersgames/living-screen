@@ -1,0 +1,10 @@
+[Unit]
+Description=Panel power for the Mac display
+PartOf=odimac.target
+After=odimac.target
+
+[Service]
+ExecStart=/usr/lib/odimac/powerd
+SyslogIdentifier=odimac-powerd
+Restart=on-failure
+RestartSec=2

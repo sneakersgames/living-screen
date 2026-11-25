@@ -1,6 +1,6 @@
 [Unit]
 Description=Limit the OpenDisplay receiver to the Thunderbolt cable
-Before=odimac-kiosk.service network-pre.target
+Before=network-pre.target
 Wants=network-pre.target
 
 [Service]

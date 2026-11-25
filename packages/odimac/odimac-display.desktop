@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Mac Display
+Comment=Show the MacBook's screen (OpenDisplay)
+Exec=/usr/lib/odimac/mode display
+Icon=video-display
+Categories=Utility;
